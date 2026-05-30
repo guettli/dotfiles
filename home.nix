@@ -7,6 +7,7 @@ in {
 
   # Match your installed home-manager channel version. Do not change after first switch.
   home.stateVersion = "25.11";
+  home.enableNixpkgsReleaseCheck = false;
 
   programs.home-manager.enable = true;
 
@@ -31,7 +32,7 @@ in {
       skip_global_compinit=1
     '';
 
-    initExtra = ''
+    initContent = ''
       typeset -U path
       path=(
           $HOME/.nix-profile/bin
