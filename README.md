@@ -34,15 +34,20 @@ Clone and activate:
 
 ```bash
 git clone git@github.com:guettli/dotfiles.git ~/.config/home-manager
-NIXPKGS=$(nix --extra-experimental-features 'nix-command flakes' eval --impure --raw 'nixpkgs#outPath')
+NIXPKGS=$(nix --extra-experimental-features 'nix-command flakes' flake metadata nixpkgs --json | python3 -c "import sys,json; print(json.load(sys.stdin)['path'])")
 nix --extra-experimental-features 'nix-command flakes' run nixpkgs#home-manager -- switch -I nixpkgs=$NIXPKGS
 ```
+
+> If `~/.config/home-manager` already exists, replace the clone with:
+> ```bash
+> git -C ~/.config/home-manager pull
+> ```
 
 ### Applying changes
 
 Edit `home.nix`, then:
 
 ```bash
-NIXPKGS=$(nix eval --impure --raw 'nixpkgs#outPath')
+NIXPKGS=$(nix flake metadata nixpkgs --json | python3 -c "import sys,json; print(json.load(sys.stdin)['path'])")
 nix run nixpkgs#home-manager -- switch -I nixpkgs=$NIXPKGS
 ```
