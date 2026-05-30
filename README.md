@@ -12,7 +12,6 @@ Shell environment managed with [Home Manager](https://github.com/nix-community/h
 | [Atuin](https://github.com/atuinsh/atuin) | Shell history |
 | [direnv](https://direnv.net/) + [nix-direnv](https://github.com/nix-community/nix-direnv) | Per-directory env vars |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer |
-| [k9s](https://k9scli.io/) | Kubernetes TUI |
 
 ## Setup
 
