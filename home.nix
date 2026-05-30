@@ -6,7 +6,7 @@ in {
   home.homeDirectory = "/home/${user}";
 
   # Match your installed home-manager channel version. Do not change after first switch.
-  home.stateVersion = "24.11";
+  home.stateVersion = "25.11";
 
   programs.home-manager.enable = true;
 
