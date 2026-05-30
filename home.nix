@@ -119,7 +119,7 @@ in {
       };
       time = {
         disabled = false;
-        format = "[$time]($style)\n";
+        format = "[$time]($style) ";
         time_format = "%H:%M";
       };
       git_status = {

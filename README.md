@@ -21,22 +21,28 @@ Shell environment managed with [Home Manager](https://github.com/nix-community/h
 
 ### First time on a new account
 
+Back up any existing shell config files that Home Manager will manage:
+
 ```bash
-git clone git@github.com:guettli/dotfiles.git ~/.config/home-manager
-nix run nixpkgs#home-manager -- switch
+for f in ~/.zshrc ~/.zshenv ~/.config/zsh/plugins.txt ~/.config/starship.toml \
+          ~/.config/atuin/config.toml ~/.config/direnv/direnv.toml; do
+  [ -f "$f" ] && mv "$f" "${f}.bak"
+done
 ```
 
-> If you have existing `~/.zshrc` or `~/.zshenv`, back them up first —
-> Home Manager will not overwrite files it does not manage:
-> ```bash
-> mv ~/.zshrc ~/.zshrc.bak
-> mv ~/.zshenv ~/.zshenv.bak
-> ```
+Clone and activate:
+
+```bash
+git clone git@github.com:guettli/dotfiles.git ~/.config/home-manager
+NIXPKGS=$(nix --extra-experimental-features 'nix-command flakes' eval --impure --raw 'nixpkgs#outPath')
+nix --extra-experimental-features 'nix-command flakes' run nixpkgs#home-manager -- switch -I nixpkgs=$NIXPKGS
+```
 
 ### Applying changes
 
 Edit `home.nix`, then:
 
 ```bash
-home-manager switch
+NIXPKGS=$(nix eval --impure --raw 'nixpkgs#outPath')
+nix run nixpkgs#home-manager -- switch -I nixpkgs=$NIXPKGS
 ```
