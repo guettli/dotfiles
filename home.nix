@@ -44,7 +44,11 @@ in {
       )
 
       export K9S_FEATURE_GATE_NODE_SHELL=true
-      export EDITOR="code -w"
+      if [[ "$TERM_PROGRAM" == "vscode" ]]; then
+          export EDITOR="code --wait"
+      else
+          export EDITOR="vim"
+      fi
       export LESS="-Ri"
 
       if [ -d "$HOME/.nix-profile/share/zsh/site-functions" ]; then
