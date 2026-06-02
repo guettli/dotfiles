@@ -9,6 +9,10 @@ in {
   home.stateVersion = "25.11";
   home.enableNixpkgsReleaseCheck = false;
 
+  # Suppress "search path entry does not exist" from the legacy channels path.
+  # Safe because this setup uses flakes exclusively, not nix channels.
+  home.sessionVariables.NIX_PATH = "";
+
   programs.home-manager.enable = true;
 
   home.packages = with pkgs; [
