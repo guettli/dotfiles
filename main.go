@@ -147,6 +147,9 @@ func getMissingPackages(packages []string) ([]string, error) {
 	cmd := exec.Command("nix", "profile", "list")
 	out, err := cmd.Output()
 	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("nix command failed: %v\nStderr: %s", err, string(exitErr.Stderr))
+		}
 		return nil, err
 	}
 	output := string(out)
