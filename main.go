@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -29,6 +30,52 @@ func main() {
 		fmt.Printf("Unknown command: %s\n", command)
 		fmt.Println("Usage: dotfiles [apply|diff]")
 		os.Exit(1)
+	}
+
+	requiredPackages := []string{
+		"nixpkgs#starship",
+		"nixpkgs#atuin",
+		"nixpkgs#direnv",
+		"nixpkgs#nix-direnv",
+		"nixpkgs#tmux",
+		"nixpkgs#antidote",
+		"nixpkgs#xclip",
+	}
+
+	if command == "apply" {
+		fmt.Println("🚀 Applying dotfiles...")
+	} else {
+		fmt.Println("🔍 Diffing dotfiles...")
+	}
+
+	missingPkgs, err := getMissingPackages(requiredPackages)
+	if err != nil {
+		fmt.Printf("⚠️ Could not check nix profiles (is nix installed?): %v\n", err)
+	} else {
+		if len(missingPkgs) > 0 {
+			if command == "diff" {
+				fmt.Println("\n--- Dependencies to Install ---")
+				for _, pkg := range missingPkgs {
+					fmt.Printf("+ %s\n", pkg)
+				}
+				fmt.Println()
+			} else if command == "apply" {
+				fmt.Println("📦 Installing missing dependencies via Nix...")
+				args := append([]string{"profile", "install"}, missingPkgs...)
+				cmd := exec.Command("nix", args...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					fmt.Printf("❌ Failed to install dependencies: %v\n", err)
+					os.Exit(1)
+				}
+				fmt.Println("✅ Dependencies installed!\n")
+			}
+		} else {
+			if command == "diff" {
+				fmt.Println("   All Nix dependencies are already installed.")
+			}
+		}
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -76,12 +123,6 @@ func main() {
 
 	hasErrors := false
 
-	if command == "apply" {
-		fmt.Println("🚀 Applying dotfiles...")
-	} else {
-		fmt.Println("🔍 Diffing dotfiles...")
-	}
-
 	for _, config := range configs {
 		err := processConfig(config, templateData, cacheDir, command)
 		if err != nil {
@@ -100,6 +141,27 @@ func main() {
 	} else {
 		fmt.Println("🎉 Diff complete!")
 	}
+}
+
+func getMissingPackages(packages []string) ([]string, error) {
+	cmd := exec.Command("nix", "profile", "list")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	output := string(out)
+	var missing []string
+	for _, pkg := range packages {
+		parts := strings.Split(pkg, "#")
+		name := pkg
+		if len(parts) > 1 {
+			name = parts[1]
+		}
+		if !strings.Contains(output, name) {
+			missing = append(missing, pkg)
+		}
+	}
+	return missing, nil
 }
 
 func processConfig(config Config, data any, cacheDir string, command string) error {
