@@ -39,7 +39,6 @@ func main() {
 		"nixpkgs#nix-direnv",
 		"nixpkgs#tmux",
 		"nixpkgs#antidote",
-		"nixpkgs#xclip",
 	}
 
 	if command == "apply" {

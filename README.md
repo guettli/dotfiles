@@ -1,21 +1,26 @@
 # dotfiles
 
-Shell environment managed with a custom embedded Go tool. 
+Shell environment managed with a custom embedded Go tool.
 
-## What's included
+I tried [chezmoi](https://www.chezmoi.io/) and
+[home-manager](https://github.com/nix-community/home-manager), but somehow these tools felt too
+complicated. This small Go application works fine for me.
 
-| Tool | Purpose |
-| --- | --- |
-| [Zsh](https://www.zsh.org/) | Shell |
-| [Antidote](https://github.com/mattmc3/antidote) | Zsh plugin manager |
-| [Starship](https://starship.rs/) | Prompt |
-| [Atuin](https://github.com/atuinsh/atuin) | Shell history |
-| [direnv](https://direnv.net/) + [nix-direnv](https://github.com/nix-community/nix-direnv) | Per-directory env vars |
-| [tmux](https://github.com/tmux/tmux) | Terminal multiplexer |
+## Software and Configuration
+
+| Tool | Purpose | Managed |
+| --- | --- | --- |
+| [Zsh](https://www.zsh.org/) | Shell | **Config only** |
+| [Antidote](https://github.com/mattmc3/antidote) | Zsh plugin manager | Binary + Config |
+| [Starship](https://starship.rs/) | Prompt | Binary + Config |
+| [Atuin](https://github.com/atuinsh/atuin) | Shell history | Binary + Config |
+| [direnv](https://direnv.net/) + [nix-direnv](https://github.com/nix-community/nix-direnv) | Per-directory env vars | Binary + Config |
+| [tmux](https://github.com/tmux/tmux) | Terminal multiplexer | Binary + Config |
 
 ## Usage
 
-You don't need to `git clone` this repository to install your dotfiles! Because the templates are embedded into the Go binary using `go:embed`, you can run the installer directly from GitHub on any new machine.
+The templates are embedded into the Go binary using `go:embed`, you can run the installer directly
+from GitHub on any new machine.
 
 ### Prerequisites
 
