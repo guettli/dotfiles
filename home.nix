@@ -15,6 +15,13 @@ in {
 
   programs.home-manager.enable = true;
 
+  home.file.".config/nix/nix.conf".text = ''
+    # Managed by home-manager. Edit: https://github.com/guettli/dotfiles/blob/main/home.nix
+    experimental-features = nix-command flakes
+    warn-dirty = false
+    nix-path =
+  '';
+
   home.packages = with pkgs; [
     antidote
     xclip
