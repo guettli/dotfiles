@@ -1,0 +1,40 @@
+[kubernetes]
+disabled = false
+
+[golang]
+disabled = true
+
+[gcloud]
+disabled = true
+
+[python]
+disabled = true
+
+[nodejs]
+disabled = true
+
+[direnv]
+disabled = false
+symbol = ""
+allowed_msg = ""
+loaded_msg = ""
+not_allowed_msg = " 🚫 not allowed"
+denied_msg = " 🔒 denied"
+unloaded_msg = " 🌪 not loaded"
+format = "[$symbol$loaded$allowed]($style) "
+style = "bold yellow"
+
+[time]
+disabled = false
+format = "[$time]($style) "
+time_format = "%H:%M"
+
+[git_status]
+conflicted = " conflicted"
+ahead = " ahead"
+behind = " behind"
+diverged = " diverged"
+up_to_date = ""
+stashed = " stashes"
+untracked = " untracked"
+modified = "m"

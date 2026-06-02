@@ -1,6 +1,6 @@
 # dotfiles
 
-Shell environment managed with [Home Manager](https://github.com/nix-community/home-manager).
+Shell environment managed with a custom embedded Go tool. 
 
 ## What's included
 
@@ -13,43 +13,47 @@ Shell environment managed with [Home Manager](https://github.com/nix-community/h
 | [direnv](https://direnv.net/) + [nix-direnv](https://github.com/nix-community/nix-direnv) | Per-directory env vars |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer |
 
-## Setup
+## Usage
+
+You don't need to `git clone` this repository to install your dotfiles! Because the templates are embedded into the Go binary using `go:embed`, you can run the installer directly from GitHub on any new machine.
 
 ### Prerequisites
 
-[Nix](https://github.com/DeterminateSystems/nix-installer) must be installed.
+You need [Go](https://go.dev/doc/install) installed.
 
-### First time on a new account
+### 1. Apply Changes (Installation)
 
-Back up any existing shell config files that Home Manager will manage:
-
-```bash
-for f in ~/.zshrc ~/.zshenv ~/.config/nix/nix.conf ~/.config/zsh/plugins.txt \
-          ~/.config/starship.toml ~/.config/atuin/config.toml \
-          ~/.config/direnv/direnv.toml; do
-  [ -f "$f" ] && mv "$f" "${f}.bak"
-done
-```
-
-Clone and activate:
+To safely deploy your dotfiles to a machine, run:
 
 ```bash
-git clone git@github.com:guettli/dotfiles.git ~/.config/home-manager
-NIXPKGS=$(nix --extra-experimental-features 'nix-command flakes' flake metadata nixpkgs --json | python3 -c "import sys,json; print(json.load(sys.stdin)['path'])")
-nix --extra-experimental-features 'nix-command flakes' run nixpkgs#home-manager -- switch -I nixpkgs=$NIXPKGS
+go run github.com/guettli/dotfiles@latest apply
 ```
 
-> If `~/.config/home-manager` already exists, replace the clone with:
->
-> ```bash
-> git -C ~/.config/home-manager pull
-> ```
+**Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the `apply` command will **abort** and show you a diff, preventing accidental data loss.
 
-### Applying changes
+### 2. View Pending Changes (Diff)
 
-Edit `home.nix`, then:
+To see what changes the tool *would* make to your machine without modifying anything, run:
 
 ```bash
-NIXPKGS=$(nix flake metadata nixpkgs --json | python3 -c "import sys,json; print(json.load(sys.stdin)['path'])")
-nix run nixpkgs#home-manager -- switch -I nixpkgs=$NIXPKGS
+go run github.com/guettli/dotfiles@latest diff
 ```
+
+---
+
+## Developing
+
+If you want to edit the configurations:
+
+1. Clone the repository locally:
+   ```bash
+   git clone git@github.com:guettli/dotfiles.git
+   cd dotfiles
+   ```
+2. Modify the files inside the `templates/` directory.
+3. Test your changes locally before committing:
+   ```bash
+   go run main.go diff
+   go run main.go apply
+   ```
+4. Commit and push. You can immediately run `go run github.com/guettli/dotfiles@latest apply` on your other machines to sync.
