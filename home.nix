@@ -33,6 +33,8 @@ in {
     '';
 
     initContent = ''
+      # Managed by home-manager. Edit: https://github.com/guettli/dotfiles/blob/main/home.nix
+
       typeset -U path
       path=(
           $HOME/.nix-profile/bin
@@ -95,6 +97,7 @@ in {
   };
 
   home.file.".config/zsh/plugins.txt".text = ''
+    # Managed by home-manager. Edit: https://github.com/guettli/dotfiles/blob/main/home.nix
     zsh-users/zsh-autosuggestions
     zsh-users/zsh-syntax-highlighting
     zsh-users/zsh-completions
@@ -168,6 +171,7 @@ in {
     enable = true;
     mouse = true;
     extraConfig = ''
+      # Managed by home-manager. Edit: https://github.com/guettli/dotfiles/blob/main/home.nix
       # Shift+click to copy with mouse (plain click just selects)
       unbind -T copy-mode-vi MouseDragEnd1Pane
     '';
