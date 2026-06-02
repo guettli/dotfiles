@@ -61,7 +61,7 @@ func main() {
 				fmt.Println()
 			} else if command == "apply" {
 				fmt.Println("📦 Installing missing dependencies via Nix...")
-				args := append([]string{"profile", "install"}, missingPkgs...)
+				args := append([]string{"--extra-experimental-features", "nix-command flakes", "profile", "add"}, missingPkgs...)
 				cmd := exec.Command("nix", args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -144,7 +144,7 @@ func main() {
 }
 
 func getMissingPackages(packages []string) ([]string, error) {
-	cmd := exec.Command("nix", "profile", "list")
+	cmd := exec.Command("nix", "--extra-experimental-features", "nix-command flakes", "profile", "list")
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -180,6 +180,8 @@ func processConfig(config Config, data any, cacheDir string, command string) err
 	}
 
 	var renderedBuffer bytes.Buffer
+	renderedBuffer.WriteString("# DO NOT EDIT\n")
+	renderedBuffer.WriteString("# Managed by dotfiles: https://github.com/guettli/dotfiles\n\n")
 	if err := tmpl.Execute(&renderedBuffer, data); err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
 	}

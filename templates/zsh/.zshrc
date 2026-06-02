@@ -1,5 +1,3 @@
-# Managed by custom Go dotfile manager
-
 typeset -U path
 path=(
     $HOME/.nix-profile/bin
