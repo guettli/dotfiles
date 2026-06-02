@@ -42,9 +42,15 @@ To safely install the required Nix dependencies and deploy your dotfiles to a ma
 go run github.com/guettli/dotfiles@latest apply
 ```
 
+To overwrite local modifications, use the `--force` flag:
+
+```bash
+go run github.com/guettli/dotfiles@latest apply --force
+```
+
 **Dependency Installation:** It will automatically check your `nix profile` and install any missing tools (Starship, Atuin, Direnv, Tmux, Antidote, xclip).
 
-**Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the `apply` command will **abort** and show you a diff, preventing accidental data loss.
+**Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the `apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass this with `--force`.
 
 ---
 

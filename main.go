@@ -21,14 +21,23 @@ type Config struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: dotfiles [apply|diff]")
+		fmt.Println("Usage: dotfiles [apply|diff] [--force]")
 		os.Exit(1)
 	}
 
-	command := os.Args[1]
+	command := ""
+	force := false
+	for _, arg := range os.Args[1:] {
+		if arg == "--force" {
+			force = true
+		} else if command == "" {
+			command = arg
+		}
+	}
+
 	if command != "apply" && command != "diff" {
 		fmt.Printf("Unknown command: %s\n", command)
-		fmt.Println("Usage: dotfiles [apply|diff]")
+		fmt.Println("Usage: dotfiles [apply|diff] [--force]")
 		os.Exit(1)
 	}
 
@@ -123,7 +132,7 @@ func main() {
 	hasErrors := false
 
 	for _, config := range configs {
-		err := processConfig(config, templateData, cacheDir, command)
+		err := processConfig(config, templateData, cacheDir, command, force)
 		if err != nil {
 			fmt.Printf("❌ Error processing %s: %v\n", config.Source, err)
 			hasErrors = true
@@ -166,7 +175,7 @@ func getMissingPackages(packages []string) ([]string, error) {
 	return missing, nil
 }
 
-func processConfig(config Config, data any, cacheDir string, command string) error {
+func processConfig(config Config, data any, cacheDir string, command string, force bool) error {
 	// 1. Render the template
 	contentBytes, err := templatesFS.ReadFile(config.Source)
 	if err != nil {
@@ -219,7 +228,10 @@ func processConfig(config Config, data any, cacheDir string, command string) err
 				if !bytes.Equal(cacheBytes, destBytes) {
 					fmt.Printf("\n⚠️ LOCAL MODIFICATION DETECTED: %s\n", config.Destination)
 					runDiffCommand(config.Destination, destBytes, "Installed Baseline", "Current Local File")
-					return fmt.Errorf("local modifications detected in %s. Please sync them to templates or revert them", config.Destination)
+					if !force {
+						return fmt.Errorf("local modifications detected in %s. Please sync them to templates or revert them (or use --force to overwrite)", config.Destination)
+					}
+					fmt.Println("   Continuing anyway because --force was used.")
 				}
 			} else {
 				// Destination exists but no cache. First run for this tool? Back it up.
