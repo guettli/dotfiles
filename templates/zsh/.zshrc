@@ -74,4 +74,7 @@ alias k="kubectl"
 alias toClipboard="xclip -sel clip"
 alias fromClipboard="xclip -sel clip -out"
 
+# Starship prompt
+eval "$(starship init zsh)"
+
 skip_global_compinit=1
