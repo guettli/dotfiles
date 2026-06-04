@@ -80,6 +80,7 @@ if [[ -o interactive ]]; then
 
     # Keybindings
     bindkey '^ ' autosuggest-accept
+    bindkey -e
 
     # Do not show "%" marker when command output has no trailing newline.
     PROMPT_EOL_MARK=""
