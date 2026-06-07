@@ -48,6 +48,7 @@ func main() {
 		"nixpkgs#nix-direnv",
 		"nixpkgs#tmux",
 		"nixpkgs#antidote",
+		"nixpkgs#bash-completion",
 	}
 
 	if command == "apply" {
@@ -102,6 +103,14 @@ func main() {
 		{
 			Source:      "templates/zsh/plugins.txt",
 			Destination: filepath.Join(homeDir, ".config", "zsh", "plugins.txt"),
+		},
+		{
+			Source:      "templates/bash/.bashrc",
+			Destination: filepath.Join(homeDir, ".bashrc"),
+		},
+		{
+			Source:      "templates/shell/common.sh",
+			Destination: filepath.Join(homeDir, ".config", "shell", "common.sh"),
 		},
 		{
 			Source:      "templates/starship/starship.toml",
