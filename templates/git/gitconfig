@@ -7,3 +7,11 @@
 {{ end }}
 [core]
     hooksPath = ~/.config/git/hooks
+
+[merge]
+    tool = conflict-overview
+
+# https://github.com/guettli/git-tips
+[mergetool "conflict-overview"]
+    cmd = git-conflict-overview.sh "$BASE" "$LOCAL" "$REMOTE" "$MERGED"
+    trustExitCode = true
