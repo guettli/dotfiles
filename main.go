@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,9 +50,26 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	if path == "" {
 		path = defaultPath
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo, or pass --config <path>", path, err)
+	var data []byte
+	var err error
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		resp, err := http.Get(path)
+		if err != nil {
+			return UserConfig{}, fmt.Errorf("could not fetch %s: %w", path, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return UserConfig{}, fmt.Errorf("could not fetch %s: HTTP %d", path, resp.StatusCode)
+		}
+		data, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return UserConfig{}, fmt.Errorf("could not read response from %s: %w", path, err)
+		}
+	} else {
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo, or pass --config <path>", path, err)
+		}
 	}
 	if configPath != "" && configPath != defaultPath {
 		if err := os.MkdirAll(filepath.Dir(defaultPath), 0755); err != nil {
