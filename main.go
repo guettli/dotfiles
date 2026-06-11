@@ -255,12 +255,17 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 		}
 	}
 
-	// 3. Write destination file
+	// 3. Write destination file (skip if already up to date)
+	if destBytes, err := os.ReadFile(config.Destination); err == nil && bytes.Equal(destBytes, renderedContent) {
+		fmt.Printf("   unchanged %s\n", config.Destination)
+		return nil
+	}
+
 	err = os.WriteFile(config.Destination, renderedContent, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write destination file: %w", err)
 	}
-	
+
 	// 4. Update cache baseline
 	err = os.WriteFile(cacheFile, renderedContent, 0644)
 	if err != nil {
