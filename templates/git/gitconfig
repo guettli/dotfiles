@@ -2,7 +2,9 @@
     name = {{ .Name }}
     email = {{ .PersonalEmail }}
 {{ range .Orgs }}
-[includeIf "hasconfig:remote.*.url:**{{ .URL }}**"]
+[includeIf "hasconfig:remote.*.url:*{{ .Host }}:{{ .Name }}/**"]
+    path = {{ $.Home }}/.gitconfig-org-{{ .Name }}
+[includeIf "hasconfig:remote.*.url:*://{{ .Host }}/{{ .Name }}/**"]
     path = {{ $.Home }}/.gitconfig-org-{{ .Name }}
 {{ end }}
 [core]

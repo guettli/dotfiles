@@ -28,6 +28,7 @@ type OrgConfig struct {
 	URL   string `yaml:"url"`
 	Email string `yaml:"email"`
 	Name  string `yaml:"-"` // last path segment of URL, computed after load
+	Host  string `yaml:"-"` // host portion of URL (before first /), computed after load
 }
 
 type UserConfig struct {
@@ -87,6 +88,7 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	for i, org := range cfg.Orgs {
 		parts := strings.Split(org.URL, "/")
 		cfg.Orgs[i].Name = parts[len(parts)-1]
+		cfg.Orgs[i].Host = parts[0]
 	}
 	return cfg, nil
 }
