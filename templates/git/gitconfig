@@ -1,3 +1,6 @@
 [user]
     name = Thomas Güttler
-    email = thomas.guettler@syself.com
+    email = info@thomas-guettler.de
+
+[includeIf "hasconfig:remote.*.url:**syself**"]
+    path = ~/.gitconfig-syself

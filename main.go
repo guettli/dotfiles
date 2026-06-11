@@ -132,6 +132,10 @@ func main() {
 			Source:      "templates/git/gitconfig",
 			Destination: filepath.Join(homeDir, ".gitconfig"),
 		},
+		{
+			Source:      "templates/git/gitconfig-syself",
+			Destination: filepath.Join(homeDir, ".gitconfig-syself"),
+		},
 	}
 
 	templateData := struct {
