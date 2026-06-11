@@ -43,13 +43,23 @@ type TemplateData struct {
 }
 
 func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
+	defaultPath := filepath.Join(homeDir, ".config", "dotfiles", "config.yaml")
 	path := configPath
 	if path == "" {
-		path = filepath.Join(homeDir, ".config", "dotfiles", "config.yaml")
+		path = defaultPath
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo, or pass --config <path>", path, err)
+	}
+	if configPath != "" && configPath != defaultPath {
+		if err := os.MkdirAll(filepath.Dir(defaultPath), 0755); err != nil {
+			return UserConfig{}, fmt.Errorf("could not create config directory: %w", err)
+		}
+		if err := os.WriteFile(defaultPath, data, 0644); err != nil {
+			return UserConfig{}, fmt.Errorf("could not copy config to %s: %w", defaultPath, err)
+		}
+		fmt.Printf("   Copied config to %s\n", defaultPath)
 	}
 	var cfg UserConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
