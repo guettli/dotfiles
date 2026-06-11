@@ -128,6 +128,10 @@ func main() {
 			Source:      "templates/tmux/tmux.conf",
 			Destination: filepath.Join(homeDir, ".tmux.conf"),
 		},
+		{
+			Source:      "templates/git/gitconfig",
+			Destination: filepath.Join(homeDir, ".gitconfig"),
+		},
 	}
 
 	templateData := struct {
