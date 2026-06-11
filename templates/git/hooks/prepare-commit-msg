@@ -1,0 +1,3 @@
+#!/bin/sh
+email=$(git config user.email)
+echo "# Committing as: $email" >> "$1"

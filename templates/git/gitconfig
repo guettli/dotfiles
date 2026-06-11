@@ -4,3 +4,6 @@
 
 [includeIf "hasconfig:remote.*.url:**syself**"]
     path = ~/.gitconfig-syself
+
+[core]
+    hooksPath = ~/.config/git/hooks

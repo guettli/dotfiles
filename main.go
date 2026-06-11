@@ -17,6 +17,7 @@ var templatesFS embed.FS
 type Config struct {
 	Source      string
 	Destination string
+	Mode        os.FileMode
 }
 
 func main() {
@@ -135,6 +136,11 @@ func main() {
 		{
 			Source:      "templates/git/gitconfig-syself",
 			Destination: filepath.Join(homeDir, ".gitconfig-syself"),
+		},
+		{
+			Source:      "templates/git/hooks/prepare-commit-msg",
+			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "prepare-commit-msg"),
+			Mode:        0755,
 		},
 	}
 
@@ -259,13 +265,18 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 		}
 	}
 
+	mode := config.Mode
+	if mode == 0 {
+		mode = 0644
+	}
+
 	// 3. Write destination file (skip if already up to date)
 	if destBytes, err := os.ReadFile(config.Destination); err == nil && bytes.Equal(destBytes, renderedContent) {
 		fmt.Printf("   unchanged %s\n", config.Destination)
 		return nil
 	}
 
-	err = os.WriteFile(config.Destination, renderedContent, 0644)
+	err = os.WriteFile(config.Destination, renderedContent, mode)
 	if err != nil {
 		return fmt.Errorf("failed to write destination file: %w", err)
 	}
