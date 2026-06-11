@@ -42,11 +42,14 @@ type TemplateData struct {
 	Orgs          []OrgConfig
 }
 
-func loadUserConfig(homeDir string) (UserConfig, error) {
-	path := filepath.Join(homeDir, ".config", "dotfiles", "config.yaml")
+func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
+	path := configPath
+	if path == "" {
+		path = filepath.Join(homeDir, ".config", "dotfiles", "config.yaml")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo", path, err)
+		return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo, or pass --config <path>", path, err)
 	}
 	var cfg UserConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
@@ -67,17 +70,29 @@ func main() {
 
 	command := ""
 	force := false
-	for _, arg := range os.Args[1:] {
-		if arg == "--force" {
+	configPath := ""
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--force":
 			force = true
-		} else if command == "" {
-			command = arg
+		case "--config":
+			i++
+			if i >= len(args) {
+				fmt.Println("--config requires a path argument")
+				os.Exit(1)
+			}
+			configPath = args[i]
+		default:
+			if command == "" {
+				command = args[i]
+			}
 		}
 	}
 
 	if command != "apply" && command != "diff" {
 		fmt.Printf("Unknown command: %s\n", command)
-		fmt.Println("Usage: dotfiles [apply|diff] [--force]")
+		fmt.Println("Usage: dotfiles [apply|diff] [--force] [--config <path>]")
 		os.Exit(1)
 	}
 
@@ -133,7 +148,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	userConfig, err := loadUserConfig(homeDir)
+	userConfig, err := loadUserConfig(homeDir, configPath)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
 		os.Exit(1)
