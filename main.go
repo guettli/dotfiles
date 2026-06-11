@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed all:templates/*
@@ -18,6 +20,43 @@ type Config struct {
 	Source      string
 	Destination string
 	Mode        os.FileMode
+}
+
+type OrgConfig struct {
+	URL   string `yaml:"url"`
+	Email string `yaml:"email"`
+	Name  string `yaml:"-"` // last path segment of URL, computed after load
+}
+
+type UserConfig struct {
+	Name          string      `yaml:"name"`
+	PersonalEmail string      `yaml:"personal_email"`
+	Orgs          []OrgConfig `yaml:"orgs"`
+}
+
+type TemplateData struct {
+	User          string
+	Home          string
+	Name          string
+	PersonalEmail string
+	Orgs          []OrgConfig
+}
+
+func loadUserConfig(homeDir string) (UserConfig, error) {
+	path := filepath.Join(homeDir, ".config", "dotfiles", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo", path, err)
+	}
+	var cfg UserConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return UserConfig{}, fmt.Errorf("could not parse %s: %w", path, err)
+	}
+	for i, org := range cfg.Orgs {
+		parts := strings.Split(org.URL, "/")
+		cfg.Orgs[i].Name = parts[len(parts)-1]
+	}
+	return cfg, nil
 }
 
 func main() {
@@ -94,7 +133,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	userConfig, err := loadUserConfig(homeDir)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
+	}
+
 	cacheDir := filepath.Join(homeDir, ".local", "state", "dotfiles", "installed_cache")
+
+	templateData := TemplateData{
+		User:          os.Getenv("USER"),
+		Home:          homeDir,
+		Name:          userConfig.Name,
+		PersonalEmail: userConfig.PersonalEmail,
+		Orgs:          userConfig.Orgs,
+	}
 
 	configs := []Config{
 		{
@@ -134,22 +187,10 @@ func main() {
 			Destination: filepath.Join(homeDir, ".gitconfig"),
 		},
 		{
-			Source:      "templates/git/gitconfig-syself",
-			Destination: filepath.Join(homeDir, ".gitconfig-syself"),
-		},
-		{
 			Source:      "templates/git/hooks/prepare-commit-msg",
 			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "prepare-commit-msg"),
 			Mode:        0755,
 		},
-	}
-
-	templateData := struct {
-		User string
-		Home string
-	}{
-		User: os.Getenv("USER"),
-		Home: homeDir,
 	}
 
 	hasErrors := false
@@ -158,6 +199,18 @@ func main() {
 		err := processConfig(config, templateData, cacheDir, command, force)
 		if err != nil {
 			fmt.Printf("❌ Error processing %s: %v\n", config.Source, err)
+			hasErrors = true
+		}
+	}
+
+	for _, org := range userConfig.Orgs {
+		orgConfig := Config{
+			Source:      "templates/git/gitconfig-org",
+			Destination: filepath.Join(homeDir, ".gitconfig-org-"+org.Name),
+		}
+		err := processConfig(orgConfig, struct{ Email string }{org.Email}, cacheDir, command, force)
+		if err != nil {
+			fmt.Printf("❌ Error processing org config for %s: %v\n", org.URL, err)
 			hasErrors = true
 		}
 	}
@@ -225,7 +278,7 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	}
 
 	cacheFile := filepath.Join(cacheDir, config.Source)
-	
+
 	// Create cache dir structure
 	if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
@@ -298,7 +351,7 @@ func runDiffCommand(destPath string, compareContent []byte, labelA string, label
 		return fmt.Errorf("failed to create temp file for diff: %w", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	if _, err := tmpFile.Write(compareContent); err != nil {
 		return fmt.Errorf("failed to write to temp file: %w", err)
 	}
@@ -310,11 +363,11 @@ func runDiffCommand(destPath string, compareContent []byte, labelA string, label
 	}
 
 	cmd := exec.Command("diff", "-u", "--label", labelA, "--label", labelB, destPath, tmpFile.Name())
-	
+
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
-	
+
 	err = cmd.Run()
 	if err != nil {
 		// diff exits with 1 if there are differences
@@ -325,7 +378,7 @@ func runDiffCommand(destPath string, compareContent []byte, labelA string, label
 		}
 		return fmt.Errorf("diff command failed: %w", err)
 	}
-	
+
 	fmt.Printf("   %s is up to date.\n", destPath)
 	return nil
 }

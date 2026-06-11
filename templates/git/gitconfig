@@ -1,9 +1,9 @@
 [user]
-    name = Thomas Güttler
-    email = info@thomas-guettler.de
-
-[includeIf "hasconfig:remote.*.url:**syself**"]
-    path = ~/.gitconfig-syself
-
+    name = {{ .Name }}
+    email = {{ .PersonalEmail }}
+{{ range .Orgs }}
+[includeIf "hasconfig:remote.*.url:**{{ .URL }}**"]
+    path = {{ $.Home }}/.gitconfig-org-{{ .Name }}
+{{ end }}
 [core]
     hooksPath = ~/.config/git/hooks

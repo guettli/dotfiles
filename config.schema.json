@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Dotfiles Config",
+  "type": "object",
+  "required": ["name", "personal_email"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Your full name for git commits"
+    },
+    "personal_email": {
+      "type": "string",
+      "description": "Default git email used when no org matches"
+    },
+    "orgs": {
+      "type": "array",
+      "description": "Map of remote URL prefixes to git email overrides",
+      "items": {
+        "type": "object",
+        "required": ["url", "email"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Remote URL prefix to match, e.g. github.com/my-company"
+          },
+          "email": {
+            "type": "string",
+            "description": "Git email to use for repos whose remote URL contains this prefix"
+          }
+        }
+      }
+    }
+  }
+}
