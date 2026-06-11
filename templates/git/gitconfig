@@ -8,6 +8,9 @@
 [core]
     hooksPath = ~/.config/git/hooks
 
+[init]
+    defaultBranch = main
+
 [merge]
     tool = conflict-overview
 
