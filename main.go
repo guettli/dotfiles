@@ -22,6 +22,7 @@ type Config struct {
 	Source      string
 	Destination string
 	Mode        os.FileMode
+	NoHeader    bool
 }
 
 type OrgConfig struct {
@@ -240,6 +241,7 @@ func main() {
 		{
 			Source:      "templates/git/commit-template",
 			Destination: filepath.Join(homeDir, ".config", "git", "commit-template"),
+			NoHeader:    true,
 		},
 	}
 
@@ -314,8 +316,10 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	}
 
 	var renderedBuffer bytes.Buffer
-	renderedBuffer.WriteString("# DO NOT EDIT\n")
-	renderedBuffer.WriteString("# Managed by dotfiles: https://github.com/guettli/dotfiles\n\n")
+	if !config.NoHeader {
+		renderedBuffer.WriteString("# DO NOT EDIT\n")
+		renderedBuffer.WriteString("# Managed by dotfiles: https://github.com/guettli/dotfiles\n\n")
+	}
 	if err := tmpl.Execute(&renderedBuffer, data); err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
 	}
