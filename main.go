@@ -237,6 +237,10 @@ func main() {
 			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "prepare-commit-msg"),
 			Mode:        0755,
 		},
+		{
+			Source:      "templates/git/commit-template",
+			Destination: filepath.Join(homeDir, ".config", "git", "commit-template"),
+		},
 	}
 
 	hasErrors := false

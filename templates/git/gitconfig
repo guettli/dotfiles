@@ -10,6 +10,9 @@
 [core]
     hooksPath = ~/.config/git/hooks
 
+[commit]
+    template = ~/.config/git/commit-template
+
 [init]
     defaultBranch = main
 
