@@ -1,0 +1,5 @@
+--no-heading
+--line-number
+--column
+--hidden
+--glob=!.git/*

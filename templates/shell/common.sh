@@ -33,6 +33,7 @@ else
     export EDITOR="vim"
 fi
 export LESS="-Ri"
+export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/ripgreprc"
 
 # Check if shell is interactive
 is_interactive=false
@@ -53,10 +54,6 @@ if [ "$is_interactive" = true ]; then
     alias k="kubectl"
     alias toClipboard="xclip -sel clip"
     alias fromClipboard="xclip -sel clip -out"
-
-    if [[ "$TERM_PROGRAM" == "vscode" ]]; then
-        alias rg="rg --no-heading --column --hidden --glob '!.git/*'"
-    fi
 
     # Direnv (Load last)
     if command -v direnv >/dev/null; then

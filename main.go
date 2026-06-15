@@ -230,6 +230,11 @@ func main() {
 			Destination: filepath.Join(homeDir, ".tmux.conf"),
 		},
 		{
+			Source:      "templates/ripgrep/ripgreprc",
+			Destination: filepath.Join(homeDir, ".config", "ripgrep", "ripgreprc"),
+			NoHeader:    true,
+		},
+		{
 			Source:      "templates/git/gitconfig",
 			Destination: filepath.Join(homeDir, ".gitconfig"),
 		},
