@@ -1,0 +1,5 @@
+#!/bin/sh
+root=$(git rev-parse --show-toplevel)
+if [ -f "$root/.pre-commit-config.yaml" ]; then
+    pre-commit run --hook-stage pre-commit
+fi

@@ -29,6 +29,12 @@ disabled = false
 format = "[$time]($style) "
 time_format = "%H:%M"
 
+[custom.pre_commit_warning]
+command = "echo '⚠ pre-commit not installed'"
+when = 'ls .pre-commit-config.* > /dev/null 2>&1 && { hp=$(git config core.hooksPath 2>/dev/null); hp=${hp:-".git/hooks"}; hp="${hp/#~/$HOME}"; ! [ -f "$hp/pre-commit" ]; }'
+format = "[$output]($style) "
+style = "bold red"
+
 [git_status]
 conflicted = " conflicted"
 ahead = " ahead"

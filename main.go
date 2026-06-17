@@ -243,6 +243,11 @@ func main() {
 			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "prepare-commit-msg"),
 			Mode:        0755,
 		},
+		{
+			Source:      "templates/git/hooks/pre-commit",
+			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "pre-commit"),
+			Mode:        0755,
+		},
 	}
 
 	hasErrors := false
