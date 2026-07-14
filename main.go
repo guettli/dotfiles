@@ -349,26 +349,30 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 
 	// command == "apply"
 
+	newFile := config.Destination + ".new"
+
 	// 2. Check for local modifications if destination exists
 	if fileInfo, err := os.Stat(config.Destination); err == nil {
 		if fileInfo.Mode()&os.ModeSymlink != 0 {
 			// It's a symlink. We'll replace it.
 			os.Remove(config.Destination)
-		} else {
-			// Real file exists. Check against cache.
-			if _, err := os.Stat(cacheFile); err == nil {
-				// Cache exists. Diff cache against destination.
-				cacheBytes, _ := os.ReadFile(cacheFile)
-				destBytes, _ := os.ReadFile(config.Destination)
+		} else if destBytes, err := os.ReadFile(config.Destination); err == nil && !bytes.Equal(destBytes, renderedContent) {
+			// Destination differs from what we'd write. Only a problem if it also
+			// diverges from the last applied baseline — otherwise it's just a
+			// normal template update (or the cache is stale) and is safe to overwrite.
+			if cacheBytes, err := os.ReadFile(cacheFile); err == nil {
 				if !bytes.Equal(cacheBytes, destBytes) {
 					fmt.Printf("\n⚠️ LOCAL MODIFICATION DETECTED: %s\n", config.Destination)
-					runDiffCommand(config.Destination, destBytes, "Installed Baseline", "Current Local File")
+					if err := os.WriteFile(newFile, renderedContent, 0644); err != nil {
+						return fmt.Errorf("failed to write %s for diffing: %w", newFile, err)
+					}
+					fmt.Printf("   To see diff execute:\n   diff %s %s\n", config.Destination, newFile)
 					if !force {
 						return fmt.Errorf("local modifications detected in %s. Please sync them to templates or revert them (or use --force to overwrite)", config.Destination)
 					}
 					fmt.Println("   Continuing anyway because --force was used.")
 				}
-			} else {
+			} else if os.IsNotExist(err) {
 				// Destination exists but no cache. First run for this tool? Back it up.
 				backupPath := config.Destination + ".bak"
 				fmt.Printf("   Backing up unmanaged file %s to %s\n", config.Destination, backupPath)
@@ -385,6 +389,12 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	// 3. Write destination file (skip if already up to date)
 	if destBytes, err := os.ReadFile(config.Destination); err == nil && bytes.Equal(destBytes, renderedContent) {
 		fmt.Printf("   unchanged %s\n", config.Destination)
+		os.Remove(newFile)
+		// The destination already matches; make sure the cache baseline agrees too,
+		// so a stale cache doesn't cause a false "local modification" next time.
+		if err := os.WriteFile(cacheFile, renderedContent, 0644); err != nil {
+			return fmt.Errorf("failed to update cache: %w", err)
+		}
 		return nil
 	}
 
@@ -392,6 +402,7 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	if err != nil {
 		return fmt.Errorf("failed to write destination file: %w", err)
 	}
+	os.Remove(newFile)
 
 	// 4. Update cache baseline
 	err = os.WriteFile(cacheFile, renderedContent, 0644)
