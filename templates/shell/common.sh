@@ -11,18 +11,19 @@ fi
 pathadd() {
     # If directory is not already in PATH, prepend it
     case ":$PATH:" in
-        *":$1:"*) ;;
-        *) PATH="$1:$PATH" ;;
+    *":$1:"*) ;;
+    *) PATH="$1:$PATH" ;;
     esac
 }
 pathadd "$HOME/projects/git-tips/scripts"
 pathadd "$HOME/syself/app-catalog/scripts"
 pathadd "$HOME/go/bin"
-pathadd "$HOME/.local/bin"
 pathadd "$HOME/syself/dotfiles/bin"
 pathadd "$HOME/scripts"
 pathadd "$HOME/bin"
 pathadd "$HOME/.nix-profile/bin"
+pathadd "$HOME/.local/bin"
+
 unset -f pathadd
 export PATH
 
@@ -38,7 +39,7 @@ export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/ripgreprc"
 # Check if shell is interactive
 is_interactive=false
 case $- in
-    *i*) is_interactive=true ;;
+*i*) is_interactive=true ;;
 esac
 
 if [ "$is_interactive" = true ]; then
