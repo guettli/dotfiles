@@ -133,6 +133,7 @@ func main() {
 		"nixpkgs#atuin",
 		"nixpkgs#direnv",
 		"nixpkgs#nix-direnv",
+		"nixpkgs#mise",
 		"nixpkgs#tmux",
 		"nixpkgs#antidote",
 		"nixpkgs#bash-completion",

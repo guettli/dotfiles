@@ -51,6 +51,10 @@ if [ "$is_interactive" = true ]; then
         eval "$(starship init $shell_type)"
     fi
 
+    if command -v mise >/dev/null; then
+        eval "$(mise activate $shell_type)"
+    fi
+
     # Aliases
     alias k="kubectl"
     alias toClipboard="xclip -sel clip"

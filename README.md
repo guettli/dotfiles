@@ -15,6 +15,7 @@ complicated. This small Go application works fine for me.
 | [Starship](https://starship.rs/) | Prompt | Binary + Config |
 | [Atuin](https://github.com/atuinsh/atuin) | Shell history | Binary + Config |
 | [direnv](https://direnv.net/) + [nix-direnv](https://github.com/nix-community/nix-direnv) | Per-directory env vars | Binary + Config |
+| [mise](https://mise.jdx.dev/) | Per-project tool versions/env vars | Binary |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer | Binary + Config |
 
 ## Usage
