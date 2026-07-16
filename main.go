@@ -70,6 +70,9 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	} else {
 		data, err = os.ReadFile(path)
 		if err != nil {
+			if mkdirErr := os.MkdirAll(filepath.Dir(path), 0755); mkdirErr != nil {
+				return UserConfig{}, fmt.Errorf("could not read %s: %w\ncould not create %s: %v", path, err, filepath.Dir(path), mkdirErr)
+			}
 			return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo, or pass --config <path>", path, err)
 		}
 	}
