@@ -4,10 +4,8 @@ if [[ -f "$HOME/.config/shell/common.sh" ]]; then
 fi
 
 if [[ $- == *i* ]]; then
-    # Bash completion
-    if [ -f "$HOME/.nix-profile/etc/profile.d/bash_completion.sh" ]; then
-        source "$HOME/.nix-profile/etc/profile.d/bash_completion.sh"
-    elif [ -f /usr/share/bash-completion/bash_completion ]; then
+    # Bash completion (from the system package: apt install bash-completion)
+    if [ -f /usr/share/bash-completion/bash_completion ]; then
         source /usr/share/bash-completion/bash_completion
     elif [ -f /etc/bash_completion ]; then
         source /etc/bash_completion
