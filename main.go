@@ -131,15 +131,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	requiredPackages := []string{
-		"nixpkgs#starship",
-		"nixpkgs#atuin",
-		"nixpkgs#direnv",
-		"nixpkgs#nix-direnv",
-		"nixpkgs#mise",
-		"nixpkgs#tmux",
-		"nixpkgs#antidote",
-		"nixpkgs#bash-completion",
+	// Tools installed globally via mise (mise itself is the installer, so it is
+	// not listed here). Everything below resolves from the mise registry.
+	requiredTools := []string{
+		"starship",
+		"atuin",
+		"direnv",
+		"tmux",
 	}
 
 	if command == "apply" {
@@ -148,32 +146,33 @@ func main() {
 		fmt.Println("🔍 Diffing dotfiles...")
 	}
 
-	missingPkgs, err := getMissingPackages(requiredPackages)
+	missingTools, err := getMissingTools(requiredTools)
 	if err != nil {
-		fmt.Printf("⚠️ Could not check nix profiles (is nix installed?): %v\n", err)
+		fmt.Printf("⚠️ Could not check mise tools (is mise installed?): %v\n", err)
 	} else {
-		if len(missingPkgs) > 0 {
+		if len(missingTools) > 0 {
 			if command == "diff" {
 				fmt.Println("\n--- Dependencies to Install ---")
-				for _, pkg := range missingPkgs {
-					fmt.Printf("+ %s\n", pkg)
+				for _, tool := range missingTools {
+					fmt.Printf("+ %s\n", tool)
 				}
 				fmt.Println()
 			} else if command == "apply" {
-				fmt.Println("📦 Installing missing dependencies via Nix...")
-				args := append([]string{"--extra-experimental-features", "nix-command flakes", "profile", "add"}, missingPkgs...)
-				cmd := exec.Command("nix", args...)
+				fmt.Println("📦 Installing missing dependencies via mise...")
+				args := append([]string{"use", "-g"}, missingTools...)
+				cmd := exec.Command("mise", args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				if err := cmd.Run(); err != nil {
 					fmt.Printf("❌ Failed to install dependencies: %v\n", err)
 					os.Exit(1)
 				}
-				fmt.Println("✅ Dependencies installed!\n")
+				fmt.Println("✅ Dependencies installed!")
+				fmt.Println()
 			}
 		} else {
 			if command == "diff" {
-				fmt.Println("   All Nix dependencies are already installed.")
+				fmt.Println("   All mise dependencies are already installed.")
 			}
 		}
 	}
@@ -182,6 +181,12 @@ func main() {
 	if err != nil {
 		fmt.Printf("Failed to get home directory: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Antidote (zsh plugin manager) is not in the mise registry; install it as a
+	// plain git clone into ~/.antidote, matching what .zshrc sources.
+	if err := ensureAntidote(homeDir, command); err != nil {
+		fmt.Printf("⚠️ Could not set up antidote: %v\n", err)
 	}
 
 	userConfig, err := loadUserConfig(homeDir, configPath)
@@ -288,28 +293,51 @@ func main() {
 	}
 }
 
-func getMissingPackages(packages []string) ([]string, error) {
-	cmd := exec.Command("nix", "--extra-experimental-features", "nix-command flakes", "profile", "list")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("nix command failed: %v\nStderr: %s", err, string(exitErr.Stderr))
-		}
-		return nil, err
+// getMissingTools returns the subset of tools that mise does not currently
+// resolve to a binary. A tool is considered installed if `mise which <tool>`
+// succeeds (it prints the shim/install path and exits 0).
+func getMissingTools(tools []string) ([]string, error) {
+	// Fail fast with a clear error if mise is not on PATH at all.
+	if _, err := exec.LookPath("mise"); err != nil {
+		return nil, fmt.Errorf("mise not found on PATH: %w", err)
 	}
-	output := string(out)
 	var missing []string
-	for _, pkg := range packages {
-		parts := strings.Split(pkg, "#")
-		name := pkg
-		if len(parts) > 1 {
-			name = parts[1]
-		}
-		if !strings.Contains(output, name) {
-			missing = append(missing, pkg)
+	for _, tool := range tools {
+		cmd := exec.Command("mise", "which", tool)
+		if err := cmd.Run(); err != nil {
+			missing = append(missing, tool)
 		}
 	}
 	return missing, nil
+}
+
+// ensureAntidote makes sure the antidote zsh plugin manager is available at
+// ~/.antidote (it is not in the mise registry, so we clone it directly).
+func ensureAntidote(homeDir string, command string) error {
+	dest := filepath.Join(homeDir, ".antidote")
+	if _, err := os.Stat(dest); err == nil {
+		if command == "diff" {
+			fmt.Println("   antidote already installed at ~/.antidote")
+		}
+		return nil
+	}
+	if command == "diff" {
+		fmt.Println("+ antidote (git clone https://github.com/mattmc3/antidote ~/.antidote)")
+		return nil
+	}
+	// command == "apply"
+	if _, err := exec.LookPath("git"); err != nil {
+		return fmt.Errorf("git not found on PATH, cannot install antidote: %w", err)
+	}
+	fmt.Println("📦 Installing antidote via git clone...")
+	cmd := exec.Command("git", "clone", "--depth=1", "https://github.com/mattmc3/antidote.git", dest)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to clone antidote: %w", err)
+	}
+	fmt.Println("✅ antidote installed at ~/.antidote")
+	return nil
 }
 
 func processConfig(config Config, data any, cacheDir string, command string, force bool) error {

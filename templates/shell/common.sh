@@ -21,7 +21,7 @@ pathadd "$HOME/go/bin"
 pathadd "$HOME/syself/dotfiles/bin"
 pathadd "$HOME/scripts"
 pathadd "$HOME/bin"
-pathadd "$HOME/.nix-profile/bin"
+pathadd "$HOME/.local/share/mise/shims"
 pathadd "$HOME/.local/bin"
 
 unset -f pathadd

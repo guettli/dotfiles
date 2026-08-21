@@ -9,13 +9,9 @@ typeset -U path
 if [[ -o interactive ]]; then
     setopt interactive_comments
 
-    if [ -d "$HOME/.nix-profile/share/zsh/site-functions" ]; then
-        fpath=("$HOME/.nix-profile/share/zsh/site-functions" $fpath)
-    fi
-
-    # Antidote Plugin Management
-    if [[ -f "$HOME/.nix-profile/share/antidote/antidote.zsh" ]]; then
-        source "$HOME/.nix-profile/share/antidote/antidote.zsh"
+    # Antidote Plugin Management (installed via git clone into ~/.antidote)
+    if [[ -f "$HOME/.antidote/antidote.zsh" ]]; then
+        source "$HOME/.antidote/antidote.zsh"
     fi
 
     zdir="$HOME/.config/zsh"

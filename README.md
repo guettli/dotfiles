@@ -14,8 +14,8 @@ complicated. This small Go application works fine for me.
 | [Antidote](https://github.com/mattmc3/antidote) | Zsh plugin manager | Binary + Config |
 | [Starship](https://starship.rs/) | Prompt | Binary + Config |
 | [Atuin](https://github.com/atuinsh/atuin) | Shell history | Binary + Config |
-| [direnv](https://direnv.net/) + [nix-direnv](https://github.com/nix-community/nix-direnv) | Per-directory env vars | Binary + Config |
-| [mise](https://mise.jdx.dev/) | Per-project tool versions/env vars | Binary |
+| [direnv](https://direnv.net/) | Per-directory env vars | Binary + Config |
+| [mise](https://mise.jdx.dev/) | Per-project tool versions/env vars **and the installer for the tools above** | Binary |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer | Binary + Config |
 
 ## Usage
@@ -25,11 +25,11 @@ from GitHub on any new machine.
 
 ### Prerequisites
 
-You need [Go](https://go.dev/doc/install) installed. *(Note: Zsh is expected to be installed via your system package manager or existing Nix profile.)*
+You need [Go](https://go.dev/doc/install) and [mise](https://mise.jdx.dev/) installed. The installer uses mise to install the required tools. *(Note: Zsh is expected to be installed via your system package manager.)*
 
 ### 1. View Pending Changes (Diff)
 
-To see what changes the tool *would* make to your machine without modifying anything (this will also list which Nix dependencies are missing), run:
+To see what changes the tool *would* make to your machine without modifying anything (this will also list which mise dependencies are missing), run:
 
 ```bash
 go run github.com/guettli/dotfiles@latest diff
@@ -37,7 +37,7 @@ go run github.com/guettli/dotfiles@latest diff
 
 ### 2. Apply Changes (Installation)
 
-To safely install the required Nix dependencies and deploy your dotfiles to a machine, run:
+To safely install the required dependencies (via mise) and deploy your dotfiles to a machine, run:
 
 ```bash
 go run github.com/guettli/dotfiles@latest apply
@@ -49,7 +49,7 @@ To overwrite local modifications, use the `--force` flag:
 go run github.com/guettli/dotfiles@latest apply --force
 ```
 
-**Dependency Installation:** It will automatically check your `nix profile` and install any missing tools (Starship, Atuin, Direnv, Tmux, Antidote, xclip).
+**Dependency Installation:** It will automatically check your mise tools (via `mise which`) and install any missing ones (Starship, Atuin, direnv, tmux) with `mise use -g`. Antidote is installed separately via `git clone` into `~/.antidote`, since it is not in the mise registry.
 
 **Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the `apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass this with `--force`.
 
