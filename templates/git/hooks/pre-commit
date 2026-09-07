@@ -1,9 +1,13 @@
 #!/bin/sh
 root=$(git rev-parse --show-toplevel)
-if [ -f "$root/.pre-commit-config.yaml" ]; then
+for config in prek.toml .pre-commit-config.yaml .pre-commit-config.yml; do
+    if [ ! -f "$root/$config" ]; then
+        continue
+    fi
     if ! command -v prek >/dev/null 2>&1; then
         echo "pre-commit hook: 'prek' not found on PATH — install it (see mise.toml) or commit with --no-verify" >&2
         exit 1
     fi
     prek run --hook-stage pre-commit
-fi
+    exit $?
+done
