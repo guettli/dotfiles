@@ -340,6 +340,33 @@ func ensureAntidote(homeDir string, command string) error {
 	return nil
 }
 
+const managedHeader = "# DO NOT EDIT\n" +
+	"# Managed by dotfiles: https://github.com/guettli/dotfiles\n\n"
+
+// addManagedHeader puts the "do not edit" comment at the top of the file, but
+// below a shebang line. A shebang only counts if it is the very first line, so
+// nothing may go above it.
+func addManagedHeader(content []byte) []byte {
+	shebang := []byte(nil)
+	body := content
+	if bytes.HasPrefix(content, []byte("#!")) {
+		end := bytes.IndexByte(content, '\n')
+		if end < 0 {
+			// A shebang without a trailing newline. Add one, so the header does
+			// not end up on the same line.
+			shebang, body = append(content[:len(content):len(content)], '\n'), nil
+		} else {
+			shebang, body = content[:end+1], content[end+1:]
+		}
+	}
+
+	out := make([]byte, 0, len(shebang)+len(managedHeader)+len(body))
+	out = append(out, shebang...)
+	out = append(out, managedHeader...)
+	out = append(out, body...)
+	return out
+}
+
 func processConfig(config Config, data any, cacheDir string, command string, force bool) error {
 	// 1. Render the template
 	contentBytes, err := templatesFS.ReadFile(config.Source)
@@ -353,14 +380,13 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	}
 
 	var renderedBuffer bytes.Buffer
-	if !config.NoHeader {
-		renderedBuffer.WriteString("# DO NOT EDIT\n")
-		renderedBuffer.WriteString("# Managed by dotfiles: https://github.com/guettli/dotfiles\n\n")
-	}
 	if err := tmpl.Execute(&renderedBuffer, data); err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
 	}
 	renderedContent := renderedBuffer.Bytes()
+	if !config.NoHeader {
+		renderedContent = addManagedHeader(renderedContent)
+	}
 
 	// Ensure destination directory exists
 	destDir := filepath.Dir(config.Destination)
