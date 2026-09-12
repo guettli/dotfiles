@@ -49,7 +49,7 @@ To overwrite local modifications, use the `--force` flag:
 go run github.com/guettli/dotfiles@latest apply --force
 ```
 
-**Dependency Installation:** It will automatically check your mise tools (via `mise which`) and install any missing ones (Starship, Atuin, direnv, tmux) with `mise use -g`. Antidote is installed separately via `git clone` into `~/.antidote`, since it is not in the mise registry.
+**Dependency Installation:** It will automatically check your mise tools (via `mise which`) and install any missing ones (Starship, Atuin, direnv, tmux) with `mise use -g`. To install extra tools, list them under `mise_tools` in your `config.yaml` (see `config.example.yaml`) — they are added on top of the base set, so environment-specific tools live in config rather than in the source. Antidote is installed separately via `git clone` into `~/.antidote`, since it is not in the mise registry.
 
 **Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the `apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass this with `--force`.
 

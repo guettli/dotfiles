@@ -13,6 +13,13 @@
       "type": "string",
       "description": "Default git email used when no org matches"
     },
+    "mise_tools": {
+      "type": "array",
+      "description": "Extra tools to install globally via mise, on top of the base set (starship, atuin, direnv, tmux). Each must resolve in the mise registry.",
+      "items": {
+        "type": "string"
+      }
+    },
     "orgs": {
       "type": "array",
       "description": "Map of remote URL prefixes to git email overrides",
