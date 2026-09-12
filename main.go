@@ -91,7 +91,13 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 		fmt.Printf("   Copied config to %s\n", defaultPath)
 	}
 	var cfg UserConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	// KnownFields(true) makes an unknown key a hard error instead of silently
+	// ignoring it, so a typo like `mise_tool:` or `personal_emial:` fails loudly
+	// rather than dropping the setting and leaving you to wonder why it had no
+	// effect.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
 		return UserConfig{}, fmt.Errorf("could not parse %s: %w", path, err)
 	}
 	for i, org := range cfg.Orgs {
