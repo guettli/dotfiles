@@ -1,6 +1,10 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/guettli/dotfiles/main/config.schema.json
 name: Your Name
 personal_email: you@example.com
+# Extra tools to install globally via mise, on top of the base set
+# (starship, atuin, direnv, tmux). Each must resolve in the mise registry.
+mise_tools:
+  - claude
 orgs:
   - url: github.com/your-company
     email: you@your-company.com

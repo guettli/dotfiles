@@ -36,6 +36,11 @@ type UserConfig struct {
 	Name          string      `yaml:"name"`
 	PersonalEmail string      `yaml:"personal_email"`
 	Orgs          []OrgConfig `yaml:"orgs"`
+	// MiseTools are extra tools to install globally via mise, on top of the
+	// base set every dotfiles install needs. It keeps the binary generic:
+	// environment-specific tools (e.g. `claude` on the tc coding sandboxes) are
+	// declared in config rather than baked into the source.
+	MiseTools []string `yaml:"mise_tools"`
 }
 
 type TemplateData struct {
@@ -131,20 +136,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Tools installed globally via mise (mise itself is the installer, so it is
-	// not listed here). Everything below resolves from the mise registry.
-	requiredTools := []string{
-		"starship",
-		"atuin",
-		"direnv",
-		"tmux",
-	}
-
 	if command == "apply" {
 		fmt.Println("🚀 Applying dotfiles...")
 	} else {
 		fmt.Println("🔍 Diffing dotfiles...")
 	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Failed to get home directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Load the user config first: it can declare extra mise tools to install
+	// (mise_tools), so the install set below depends on it.
+	userConfig, err := loadUserConfig(homeDir, configPath)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
+	}
+
+	// Tools installed globally via mise (mise itself is the installer, so it is
+	// not listed here). The base set is what the templates below depend on
+	// (starship for the prompt, atuin/direnv/tmux). Anything listed under
+	// `mise_tools` in the user config is appended, so environment-specific tools
+	// live in config instead of being hardcoded here. Everything resolves from
+	// the mise registry.
+	baseTools := []string{
+		"starship",
+		"atuin",
+		"direnv",
+		"tmux",
+	}
+	requiredTools := mergeTools(baseTools, userConfig.MiseTools)
 
 	missingTools, err := getMissingTools(requiredTools)
 	if err != nil {
@@ -177,22 +201,10 @@ func main() {
 		}
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Printf("Failed to get home directory: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Antidote (zsh plugin manager) is not in the mise registry; install it as a
 	// plain git clone into ~/.antidote, matching what .zshrc sources.
 	if err := ensureAntidote(homeDir, command); err != nil {
 		fmt.Printf("⚠️ Could not set up antidote: %v\n", err)
-	}
-
-	userConfig, err := loadUserConfig(homeDir, configPath)
-	if err != nil {
-		fmt.Printf("❌ %v\n", err)
-		os.Exit(1)
 	}
 
 	cacheDir := filepath.Join(homeDir, ".local", "state", "dotfiles", "installed_cache")
@@ -291,6 +303,23 @@ func main() {
 	} else {
 		fmt.Println("🎉 Diff complete!")
 	}
+}
+
+// mergeTools appends extra tools to base, trimming blanks and dropping
+// duplicates while preserving order (base first). This lets the user config add
+// tools without repeating or clobbering the base set.
+func mergeTools(base []string, extra []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, t := range append(append([]string{}, base...), extra...) {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	return out
 }
 
 // getMissingTools returns the subset of tools that mise does not currently
