@@ -107,3 +107,52 @@ func TestAddManagedHeader(t *testing.T) {
 		t.Errorf("shebang must stay first line")
 	}
 }
+
+func TestLoadUserConfig_UnknownKeyUnderOrg(t *testing.T) {
+	home := writeConfig(t, "config.toml", `
+name = "n"
+personal_email = "e@x.com"
+
+[[orgs]]
+url = "github.com/acme"
+email = "j@acme.com"
+bogus = "z"
+`)
+	if _, err := loadUserConfig(home, ""); err == nil {
+		t.Fatal("expected an error for an unknown key under [[orgs]], got nil")
+	}
+}
+
+func TestLoadUserConfig_TrailingSlashOrgRejected(t *testing.T) {
+	// A trailing slash used to yield an empty org name (~/.gitconfig-org-).
+	home := writeConfig(t, "config.toml", `
+name = "n"
+personal_email = "e@x.com"
+
+[[orgs]]
+url = "github.com/acme/"
+email = "j@acme.com"
+`)
+	// After trimming, "github.com/acme" is valid and Name must be "acme".
+	cfg, err := loadUserConfig(home, "")
+	if err != nil {
+		t.Fatalf("trailing slash should be trimmed, not error: %v", err)
+	}
+	if cfg.Orgs[0].Name != "acme" || cfg.Orgs[0].Host != "github.com" {
+		t.Errorf("got host/name %q/%q, want github.com/acme", cfg.Orgs[0].Host, cfg.Orgs[0].Name)
+	}
+}
+
+func TestLoadUserConfig_OrgWithoutSlashRejected(t *testing.T) {
+	home := writeConfig(t, "config.toml", `
+name = "n"
+personal_email = "e@x.com"
+
+[[orgs]]
+url = "github.com"
+email = "j@acme.com"
+`)
+	if _, err := loadUserConfig(home, ""); err == nil {
+		t.Fatal("expected an error for an org url without host/name, got nil")
+	}
+}

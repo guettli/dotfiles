@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -44,10 +45,14 @@ type TemplateData struct {
 	Orgs          []OrgConfig
 }
 
-// configPaths returns the current (TOML) config path and the legacy (YAML) path.
-func configPaths(homeDir string) (tomlPath, yamlPath string) {
+// configPaths returns the current (TOML) config path and the legacy (YAML)
+// paths we refuse, in the base config directory.
+func configPaths(homeDir string) (tomlPath string, legacy []string) {
 	base := filepath.Join(homeDir, ".config", "dotfiles")
-	return filepath.Join(base, "config.toml"), filepath.Join(base, "config.yaml")
+	return filepath.Join(base, "config.toml"), []string{
+		filepath.Join(base, "config.yaml"),
+		filepath.Join(base, "config.yml"),
+	}
 }
 
 // legacyConfigError refuses to run on the old YAML config and shows how to
@@ -92,7 +97,7 @@ func unknownFieldError(path string, keys []toml.Key) error {
 }
 
 func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
-	tomlPath, yamlPath := configPaths(homeDir)
+	tomlPath, legacyPaths := configPaths(homeDir)
 	path := configPath
 	if path == "" {
 		path = tomlPath
@@ -105,8 +110,10 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	}
 	if path == tomlPath {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if _, yErr := os.Stat(yamlPath); yErr == nil {
-				return UserConfig{}, legacyConfigError(yamlPath, tomlPath)
+			for _, legacy := range legacyPaths {
+				if _, yErr := os.Stat(legacy); yErr == nil {
+					return UserConfig{}, legacyConfigError(legacy, tomlPath)
+				}
 			}
 		}
 	}
@@ -126,7 +133,13 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	}
 
 	for i, org := range cfg.Orgs {
-		parts := strings.Split(org.URL, "/")
+		// Trim stray slashes (a trailing "/" is easy to paste) so we never build
+		// an empty, colliding ~/.gitconfig-org- filename; require host/name.
+		u := strings.Trim(org.URL, "/")
+		if !strings.Contains(u, "/") {
+			return UserConfig{}, fmt.Errorf("invalid org url %q in %s: expected host/name, e.g. github.com/your-company", org.URL, path)
+		}
+		parts := strings.Split(u, "/")
 		cfg.Orgs[i].Name = parts[len(parts)-1]
 		cfg.Orgs[i].Host = parts[0]
 	}
@@ -309,16 +322,28 @@ func runMise(command string) error {
 		return fmt.Errorf("mise not found on PATH — install it first: https://mise.jdx.dev/getting-started.html")
 	}
 	if command == "diff" {
-		out, err := exec.Command("mise", "ls", "--missing").Output()
+		tools, err := baseMiseTools()
 		if err != nil {
-			return fmt.Errorf("could not list mise tools: %w", err)
+			return fmt.Errorf("could not read base tool list: %w", err)
 		}
-		if len(bytes.TrimSpace(out)) == 0 {
+		// Check each base tool directly rather than via `mise ls --missing`, so
+		// the answer is correct on a fresh machine (diff writes nothing, so the
+		// conf.d file is not deployed yet) and is not polluted by the user's own
+		// global/project mise config.
+		var missing []string
+		for _, tool := range tools {
+			if !miseToolInstalled(tool) {
+				missing = append(missing, tool)
+			}
+		}
+		if len(missing) == 0 {
 			fmt.Println("   All mise tools are already installed.")
 			return nil
 		}
 		fmt.Println("\n--- mise tools to install (via `mise install`) ---")
-		fmt.Print(string(out))
+		for _, tool := range missing {
+			fmt.Printf("+ %s\n", tool)
+		}
 		fmt.Println()
 		return nil
 	}
@@ -332,6 +357,40 @@ func runMise(command string) error {
 	}
 	fmt.Println("✅ mise tools installed!")
 	return nil
+}
+
+// baseMiseTools returns the tool names declared in the embedded
+// templates/mise/dotfiles.toml [tools] table — the single source of truth for
+// the base set, sorted for stable output.
+func baseMiseTools() ([]string, error) {
+	data, err := templatesFS.ReadFile("templates/mise/dotfiles.toml")
+	if err != nil {
+		return nil, err
+	}
+	var doc struct {
+		Tools map[string]any `toml:"tools"`
+	}
+	if err := toml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	tools := make([]string, 0, len(doc.Tools))
+	for name := range doc.Tools {
+		tools = append(tools, name)
+	}
+	sort.Strings(tools)
+	return tools, nil
+}
+
+// miseToolInstalled reports whether mise has any version of tool installed. It
+// asks mise directly (`mise ls <tool> --installed`), which is independent of
+// which config file declares the tool.
+func miseToolInstalled(tool string) bool {
+	out, err := exec.Command("mise", "ls", tool, "--installed", "-J").Output()
+	if err != nil {
+		return false
+	}
+	s := strings.TrimSpace(string(out))
+	return s != "" && s != "[]"
 }
 
 // ensureAntidote makes sure the antidote zsh plugin manager is available at
