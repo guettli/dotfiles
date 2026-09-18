@@ -15,21 +15,65 @@ complicated. This small Go application works fine for me.
 | [Starship](https://starship.rs/) | Prompt | Binary + Config |
 | [Atuin](https://github.com/atuinsh/atuin) | Shell history | Binary + Config |
 | [direnv](https://direnv.net/) | Per-directory env vars | Binary + Config |
-| [mise](https://mise.jdx.dev/) | Per-project tool versions/env vars **and the installer for the tools above** | Binary |
+| [mise](https://mise.jdx.dev/) | Installs and manages all the tools above | Binary |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer | Binary + Config |
+
+## How tools are installed
+
+The base tools (Starship, Atuin, direnv, tmux) are declared in
+[`templates/mise/dotfiles.toml`](templates/mise/dotfiles.toml). `apply` deploys that file to
+`~/.config/mise/conf.d/dotfiles.toml` and then runs `mise install`, so mise itself decides what is
+missing and installs it — the Go tool keeps no tool bookkeeping of its own.
+
+To install **extra / machine-specific tools**, use mise directly:
+
+```bash
+mise use -g <tool>
+```
+
+That writes `~/.config/mise/config.toml`, a separate file dotfiles never touches — so your personal
+tools and the managed base set never fight over the same file.
+
+Antidote is not in the mise registry, so it is installed separately via `git clone` into
+`~/.antidote`.
 
 ## Usage
 
-The templates are embedded into the Go binary using `go:embed`, you can run the installer directly
-from GitHub on any new machine.
+The templates are embedded into the Go binary using `go:embed`, so you can run the installer
+directly from GitHub on any new machine.
 
 ### Prerequisites
 
-You need [Go](https://go.dev/doc/install) and [mise](https://mise.jdx.dev/) installed. The installer uses mise to install the required tools. *(Note: Zsh is expected to be installed via your system package manager.)*
+You need [Go](https://go.dev/install) and [mise](https://mise.jdx.dev/getting-started.html)
+installed. *(Zsh is expected to be installed via your system package manager.)*
+
+### Configuration
+
+Create `~/.config/dotfiles/config.toml` (TOML) from
+[`config.example.toml`](config.example.toml):
+
+```toml
+name = "Your Name"
+personal_email = "you@example.com"
+
+[[orgs]]
+url   = "github.com/your-company"
+email = "you@your-company.com"
+```
+
+`orgs` generates a per-org `~/.gitconfig-org-<name>` so repos under that org use the matching git
+email.
+
+> **Upgrading from the old YAML config?** The config format is now TOML and there is **no**
+> backwards compatibility. If a `~/.config/dotfiles/config.yaml` is present, the tool prints a
+> migration hint and refuses to run — convert it to `config.toml` (see above) and delete the old
+> file. The old `mise_tools:` key was removed; install extra tools with `mise use -g <tool>`
+> instead.
 
 ### 1. View Pending Changes (Diff)
 
-To see what changes the tool *would* make to your machine without modifying anything (this will also list which mise dependencies are missing), run:
+To see what changes the tool *would* make to your machine without modifying anything (this also
+lists which mise tools are missing), run:
 
 ```bash
 go run github.com/guettli/dotfiles@latest diff
@@ -37,7 +81,7 @@ go run github.com/guettli/dotfiles@latest diff
 
 ### 2. Apply Changes (Installation)
 
-To safely install the required dependencies (via mise) and deploy your dotfiles to a machine, run:
+To install the tools (via mise) and deploy your dotfiles:
 
 ```bash
 go run github.com/guettli/dotfiles@latest apply
@@ -49,9 +93,10 @@ To overwrite local modifications, use the `--force` flag:
 go run github.com/guettli/dotfiles@latest apply --force
 ```
 
-**Dependency Installation:** It will automatically check your mise tools (via `mise which`) and install any missing ones (Starship, Atuin, direnv, tmux) with `mise use -g`. To install extra tools, list them under `mise_tools` in your `config.yaml` (see `config.example.yaml`) — they are added on top of the base set, so environment-specific tools live in config rather than in the source. Antidote is installed separately via `git clone` into `~/.antidote`, since it is not in the mise registry.
-
-**Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the `apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass this with `--force`.
+**Overwrite Protection:** The tool maintains a hidden cache of what it previously installed. If you
+have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` directly), the
+`apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass
+this with `--force`.
 
 ---
 
@@ -67,7 +112,8 @@ If you want to edit the configurations:
 2. Modify the files inside the `templates/` directory.
 3. Test your changes locally before committing:
    ```bash
-   go run main.go diff
-   go run main.go apply
+   go run . diff
+   go run . apply
    ```
-4. Commit and push. You can immediately run `go run github.com/guettli/dotfiles@latest apply` on your other machines to sync.
+4. Commit and push. You can immediately run `go run github.com/guettli/dotfiles@latest apply` on
+   your other machines to sync.
