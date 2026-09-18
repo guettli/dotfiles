@@ -1,0 +1,9 @@
+# Copy to ~/.config/dotfiles/config.toml and edit.
+name = "Your Name"
+personal_email = "you@example.com"
+
+# One [[orgs]] table per organization. Repos whose remote URL matches `url`
+# use `email` for git commits (via ~/.gitconfig-org-<name>).
+[[orgs]]
+url   = "github.com/your-company"
+email = "you@your-company.com"

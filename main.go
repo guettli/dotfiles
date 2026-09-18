@@ -4,15 +4,13 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
 
-	"gopkg.in/yaml.v3"
+	"github.com/BurntSushi/toml"
 )
 
 //go:embed all:templates/*
@@ -26,21 +24,16 @@ type Config struct {
 }
 
 type OrgConfig struct {
-	URL   string `yaml:"url"`
-	Email string `yaml:"email"`
-	Name  string `yaml:"-"` // last path segment of URL, computed after load
-	Host  string `yaml:"-"` // host portion of URL (before first /), computed after load
+	URL   string `toml:"url"`
+	Email string `toml:"email"`
+	Name  string `toml:"-"` // last path segment of URL, computed after load
+	Host  string `toml:"-"` // host portion of URL (before first /), computed after load
 }
 
 type UserConfig struct {
-	Name          string      `yaml:"name"`
-	PersonalEmail string      `yaml:"personal_email"`
-	Orgs          []OrgConfig `yaml:"orgs"`
-	// MiseTools are extra tools to install globally via mise, on top of the
-	// base set every dotfiles install needs. It keeps the binary generic:
-	// environment-specific tools (e.g. `claude` on the tc coding sandboxes) are
-	// declared in config rather than baked into the source.
-	MiseTools []string `yaml:"mise_tools"`
+	Name          string      `toml:"name"`
+	PersonalEmail string      `toml:"personal_email"`
+	Orgs          []OrgConfig `toml:"orgs"`
 }
 
 type TemplateData struct {
@@ -51,55 +44,87 @@ type TemplateData struct {
 	Orgs          []OrgConfig
 }
 
+// configPaths returns the current (TOML) config path and the legacy (YAML) path.
+func configPaths(homeDir string) (tomlPath, yamlPath string) {
+	base := filepath.Join(homeDir, ".config", "dotfiles")
+	return filepath.Join(base, "config.toml"), filepath.Join(base, "config.yaml")
+}
+
+// legacyConfigError refuses to run on the old YAML config and shows how to
+// migrate to the new TOML format.
+func legacyConfigError(found, tomlPath string) error {
+	return fmt.Errorf(`old YAML config detected: %s
+dotfiles now uses TOML. Move your settings into %s:
+
+    name           = "Your Name"
+    personal_email = "you@example.com"
+
+    # one [[orgs]] table per org (was a YAML list):
+    [[orgs]]
+    url   = "github.com/your-company"
+    email = "you@your-company.com"
+
+The `+"`mise_tools`"+` key was removed. Declare extra tools directly with mise
+(this writes ~/.config/mise/config.toml, which dotfiles no longer touches):
+
+    mise use -g <tool>
+
+See config.example.toml. Delete the old config.yaml once migrated`, found, tomlPath)
+}
+
+// unknownFieldError reports keys present in the config file that the tool does
+// not understand, so a typo (or a removed key) fails loudly instead of being
+// silently ignored.
+func unknownFieldError(path string, keys []toml.Key) error {
+	names := make([]string, 0, len(keys))
+	miseTools := false
+	for _, k := range keys {
+		names = append(names, k.String())
+		if k.String() == "mise_tools" {
+			miseTools = true
+		}
+	}
+	msg := fmt.Sprintf("unknown field(s) in %s: %s", path, strings.Join(names, ", "))
+	if miseTools {
+		msg += "\n`mise_tools` was removed — install extra tools directly: mise use -g <tool>"
+	}
+	return fmt.Errorf("%s", msg)
+}
+
 func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
-	defaultPath := filepath.Join(homeDir, ".config", "dotfiles", "config.yaml")
+	tomlPath, yamlPath := configPaths(homeDir)
 	path := configPath
 	if path == "" {
-		path = defaultPath
+		path = tomlPath
 	}
-	var data []byte
-	var err error
-	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		resp, err := http.Get(path)
-		if err != nil {
-			return UserConfig{}, fmt.Errorf("could not fetch %s: %w", path, err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return UserConfig{}, fmt.Errorf("could not fetch %s: HTTP %d", path, resp.StatusCode)
-		}
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return UserConfig{}, fmt.Errorf("could not read response from %s: %w", path, err)
-		}
-	} else {
-		data, err = os.ReadFile(path)
-		if err != nil {
-			if mkdirErr := os.MkdirAll(filepath.Dir(path), 0755); mkdirErr != nil {
-				return UserConfig{}, fmt.Errorf("could not read %s: %w\ncould not create %s: %v", path, err, filepath.Dir(path), mkdirErr)
+
+	// Refuse the old format with a migration hint, whether it is the default
+	// legacy file or an explicit --config pointing at a YAML file.
+	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
+		return UserConfig{}, legacyConfigError(path, tomlPath)
+	}
+	if path == tomlPath {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if _, yErr := os.Stat(yamlPath); yErr == nil {
+				return UserConfig{}, legacyConfigError(yamlPath, tomlPath)
 			}
-			return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.yaml in the dotfiles repo, or pass --config <path>", path, err)
 		}
 	}
-	if configPath != "" && configPath != defaultPath {
-		if err := os.MkdirAll(filepath.Dir(defaultPath), 0755); err != nil {
-			return UserConfig{}, fmt.Errorf("could not create config directory: %w", err)
-		}
-		if err := os.WriteFile(defaultPath, data, 0644); err != nil {
-			return UserConfig{}, fmt.Errorf("could not copy config to %s: %w", defaultPath, err)
-		}
-		fmt.Printf("   Copied config to %s\n", defaultPath)
-	}
+
 	var cfg UserConfig
-	// KnownFields(true) makes an unknown key a hard error instead of silently
-	// ignoring it, so a typo like `mise_tool:` or `personal_emial:` fails loudly
-	// rather than dropping the setting and leaving you to wonder why it had no
-	// effect.
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil {
+	md, err := toml.DecodeFile(path, &cfg)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.toml in the dotfiles repo, or pass --config <path>", path, err)
+		}
 		return UserConfig{}, fmt.Errorf("could not parse %s: %w", path, err)
 	}
+	// KnownFields-style strictness: any key in the file that did not map onto a
+	// struct field is a mistake (a typo, or a key removed in a format change).
+	if undecoded := md.Undecoded(); len(undecoded) > 0 {
+		return UserConfig{}, unknownFieldError(path, undecoded)
+	}
+
 	for i, org := range cfg.Orgs {
 		parts := strings.Split(org.URL, "/")
 		cfg.Orgs[i].Name = parts[len(parts)-1]
@@ -110,7 +135,7 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: dotfiles [apply|diff] [--force]")
+		fmt.Println("Usage: dotfiles [apply|diff] [--force] [--config <path>]")
 		os.Exit(1)
 	}
 
@@ -154,57 +179,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load the user config first: it can declare extra mise tools to install
-	// (mise_tools), so the install set below depends on it.
 	userConfig, err := loadUserConfig(homeDir, configPath)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
 		os.Exit(1)
-	}
-
-	// Tools installed globally via mise (mise itself is the installer, so it is
-	// not listed here). The base set is what the templates below depend on
-	// (starship for the prompt, atuin/direnv/tmux). Anything listed under
-	// `mise_tools` in the user config is appended, so environment-specific tools
-	// live in config instead of being hardcoded here. Everything resolves from
-	// the mise registry.
-	baseTools := []string{
-		"starship",
-		"atuin",
-		"direnv",
-		"tmux",
-	}
-	requiredTools := mergeTools(baseTools, userConfig.MiseTools)
-
-	missingTools, err := getMissingTools(requiredTools)
-	if err != nil {
-		fmt.Printf("⚠️ Could not check mise tools (is mise installed?): %v\n", err)
-	} else {
-		if len(missingTools) > 0 {
-			if command == "diff" {
-				fmt.Println("\n--- Dependencies to Install ---")
-				for _, tool := range missingTools {
-					fmt.Printf("+ %s\n", tool)
-				}
-				fmt.Println()
-			} else if command == "apply" {
-				fmt.Println("📦 Installing missing dependencies via mise...")
-				args := append([]string{"use", "-g"}, missingTools...)
-				cmd := exec.Command("mise", args...)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				if err := cmd.Run(); err != nil {
-					fmt.Printf("❌ Failed to install dependencies: %v\n", err)
-					os.Exit(1)
-				}
-				fmt.Println("✅ Dependencies installed!")
-				fmt.Println()
-			}
-		} else {
-			if command == "diff" {
-				fmt.Println("   All mise dependencies are already installed.")
-			}
-		}
 	}
 
 	// Antidote (zsh plugin manager) is not in the mise registry; install it as a
@@ -224,6 +202,13 @@ func main() {
 	}
 
 	configs := []Config{
+		{
+			// Base tools live in a file dotfiles owns; `mise install` (run below)
+			// installs them. The user's own tools go in ~/.config/mise/config.toml
+			// via `mise use -g`, which dotfiles never touches.
+			Source:      "templates/mise/dotfiles.toml",
+			Destination: filepath.Join(homeDir, ".config", "mise", "conf.d", "dotfiles.toml"),
+		},
 		{
 			Source:      "templates/zsh/.zshrc",
 			Destination: filepath.Join(homeDir, ".zshrc"),
@@ -299,6 +284,12 @@ func main() {
 		}
 	}
 
+	// Tools are declared in ~/.config/mise/conf.d/dotfiles.toml (deployed above).
+	// mise decides what is missing and installs it — no tool bookkeeping here.
+	if err := runMise(command); err != nil {
+		fmt.Printf("⚠️ %v\n", err)
+	}
+
 	if hasErrors {
 		fmt.Println("⚠️ Finished with errors.")
 		os.Exit(1)
@@ -311,39 +302,36 @@ func main() {
 	}
 }
 
-// mergeTools appends extra tools to base, trimming blanks and dropping
-// duplicates while preserving order (base first). This lets the user config add
-// tools without repeating or clobbering the base set.
-func mergeTools(base []string, extra []string) []string {
-	seen := make(map[string]bool)
-	var out []string
-	for _, t := range append(append([]string{}, base...), extra...) {
-		t = strings.TrimSpace(t)
-		if t == "" || seen[t] {
-			continue
-		}
-		seen[t] = true
-		out = append(out, t)
-	}
-	return out
-}
-
-// getMissingTools returns the subset of tools that mise does not currently
-// resolve to a binary. A tool is considered installed if `mise which <tool>`
-// succeeds (it prints the shim/install path and exits 0).
-func getMissingTools(tools []string) ([]string, error) {
-	// Fail fast with a clear error if mise is not on PATH at all.
+// runMise installs the tools declared in mise's config. On diff it only reports
+// what is missing; on apply it runs `mise install` (idempotent).
+func runMise(command string) error {
 	if _, err := exec.LookPath("mise"); err != nil {
-		return nil, fmt.Errorf("mise not found on PATH: %w", err)
+		return fmt.Errorf("mise not found on PATH — install it first: https://mise.jdx.dev/getting-started.html")
 	}
-	var missing []string
-	for _, tool := range tools {
-		cmd := exec.Command("mise", "which", tool)
-		if err := cmd.Run(); err != nil {
-			missing = append(missing, tool)
+	if command == "diff" {
+		out, err := exec.Command("mise", "ls", "--missing").Output()
+		if err != nil {
+			return fmt.Errorf("could not list mise tools: %w", err)
 		}
+		if len(bytes.TrimSpace(out)) == 0 {
+			fmt.Println("   All mise tools are already installed.")
+			return nil
+		}
+		fmt.Println("\n--- mise tools to install (via `mise install`) ---")
+		fmt.Print(string(out))
+		fmt.Println()
+		return nil
 	}
-	return missing, nil
+	// command == "apply"
+	fmt.Println("📦 Installing mise tools...")
+	cmd := exec.Command("mise", "install")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("mise install failed: %w", err)
+	}
+	fmt.Println("✅ mise tools installed!")
+	return nil
 }
 
 // ensureAntidote makes sure the antidote zsh plugin manager is available at

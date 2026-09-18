@@ -1,0 +1,9 @@
+# Base tools every dotfiles install needs. `dotfiles apply` runs `mise install`
+# to install them. Your own / environment-specific tools do NOT belong here —
+# add them with `mise use -g <tool>`, which writes ~/.config/mise/config.toml
+# (a separate file that dotfiles never manages).
+[tools]
+starship = "latest"
+atuin = "latest"
+direnv = "latest"
+tmux = "latest"
