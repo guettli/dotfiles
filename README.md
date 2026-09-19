@@ -98,6 +98,11 @@ have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` 
 `apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass
 this with `--force`.
 
+> A common trigger is `~/.gitconfig`: running `gh auth setup-git` appends a
+> `[credential "https://github.com"]` helper block, which then diverges from the managed template and
+> aborts `apply`. If you push over SSH you don't need that block — re-run with `--force` to drop it;
+> otherwise move the setting into a separate, unmanaged include so `apply` leaves it alone.
+
 ---
 
 ## Developing
