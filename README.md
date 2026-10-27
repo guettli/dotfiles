@@ -17,10 +17,12 @@ complicated. This small Go application works fine for me.
 | [direnv](https://direnv.net/) | Per-directory env vars | Binary + Config |
 | [mise](https://mise.jdx.dev/) | Installs and manages all the tools above | Binary |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer | Binary + Config |
+| [ripgrep](https://github.com/BurntSushi/ripgrep) | Fast recursive grep (`rg`) | Binary + Config |
+| [fd](https://github.com/sharkdp/fd) | Fast, user-friendly `find` | Binary |
 
 ## How tools are installed
 
-The base tools (Starship, Atuin, direnv, tmux) are declared in
+The base tools (Starship, Atuin, direnv, tmux, ripgrep, fd) are declared in
 [`templates/mise/dotfiles.toml`](templates/mise/dotfiles.toml). `apply` deploys that file to
 `~/.config/mise/conf.d/dotfiles.toml` and then runs `mise install`, so mise itself decides what is
 missing and installs it — the Go tool keeps no tool bookkeeping of its own.
