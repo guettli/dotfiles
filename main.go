@@ -260,8 +260,11 @@ func main() {
 			NoHeader:    true,
 		},
 		{
-			Source:      "templates/git/gitconfig",
-			Destination: filepath.Join(homeDir, ".gitconfig"),
+			// Git reads ~/.config/git/config AND ~/.gitconfig (the latter wins).
+			// dotfiles owns the first; ~/.gitconfig belongs to the user and to
+			// tools like `gh auth setup-git`, so they never collide with apply.
+			Source:      "templates/git/config",
+			Destination: filepath.Join(homeDir, ".config", "git", "config"),
 		},
 		{
 			Source:      "templates/git/hooks/prepare-commit-msg",
@@ -276,6 +279,13 @@ func main() {
 	}
 
 	hasErrors := false
+
+	// Before deploying ~/.config/git/config: older versions managed
+	// ~/.gitconfig. Hand it over to the user (keeping what tools appended).
+	if err := migrateLegacyGitconfig(homeDir, cacheDir, command, force); err != nil {
+		fmt.Printf("❌ Error migrating ~/.gitconfig: %v\n", err)
+		hasErrors = true
+	}
 
 	for _, config := range configs {
 		err := processConfig(config, templateData, cacheDir, command, force)

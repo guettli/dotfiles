@@ -100,10 +100,17 @@ have made un-tracked manual edits to a config file (e.g., you edited `~/.zshrc` 
 `apply` command will **abort** and show you a diff, preventing accidental data loss. You can bypass
 this with `--force`.
 
-> A common trigger is `~/.gitconfig`: running `gh auth setup-git` appends a
-> `[credential "https://github.com"]` helper block, which then diverges from the managed template and
-> aborts `apply`. If you push over SSH you don't need that block — re-run with `--force` to drop it;
-> otherwise move the setting into a separate, unmanaged include so `apply` leaves it alone.
+### Git configuration
+
+dotfiles manages `~/.config/git/config`. `~/.gitconfig` is yours: git reads both, and settings in
+`~/.gitconfig` win. Tools that run `git config --global` (e.g. `gh auth setup-git`) write there, so
+they no longer collide with `apply`. dotfiles creates an (almost empty) `~/.gitconfig` if it is
+missing, because without it `git config --global` would write into the managed file.
+
+Older versions managed `~/.gitconfig` itself. `apply` migrates once: the managed part is removed,
+lines appended later (like the `gh` credential helper) are kept. If the managed part was edited,
+`apply` stops and asks you to move your settings to the end of the file, or `--force` moves the file
+to `~/.gitconfig.bak`.
 
 ---
 
