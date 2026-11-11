@@ -22,6 +22,9 @@ type Config struct {
 	Destination string
 	Mode        os.FileMode
 	NoHeader    bool
+	// NoAdopt: an existing file which dotfiles did not write is an error
+	// (not backed up and replaced), unless --force.
+	NoAdopt bool
 }
 
 type OrgConfig struct {
@@ -260,8 +263,15 @@ func main() {
 			NoHeader:    true,
 		},
 		{
-			Source:      "templates/git/gitconfig",
-			Destination: filepath.Join(homeDir, ".gitconfig"),
+			// Git reads ~/.config/git/config AND ~/.gitconfig (the latter wins).
+			// dotfiles owns the first; ~/.gitconfig belongs to the user and to
+			// tools like `gh auth setup-git`, so they never collide with apply.
+			Source:      "templates/git/config",
+			Destination: filepath.Join(homeDir, ".config", "git", "config"),
+			// git itself writes --global settings here if ~/.gitconfig is
+			// missing: such a file holds the user's settings, don't hide
+			// them in a .bak.
+			NoAdopt: true,
 		},
 		{
 			Source:      "templates/git/hooks/prepare-commit-msg",
@@ -277,10 +287,33 @@ func main() {
 
 	hasErrors := false
 
+	gitConfigOK := true
+	if err := checkXDGConfigHome(homeDir); err != nil {
+		fmt.Printf("❌ %v\n", err)
+		hasErrors = true
+		gitConfigOK = false
+	}
+
 	for _, config := range configs {
+		if config.Source == gitConfigSource && !gitConfigOK {
+			continue
+		}
 		err := processConfig(config, templateData, cacheDir, command, force)
 		if err != nil {
 			fmt.Printf("❌ Error processing %s: %v\n", config.Source, err)
+			hasErrors = true
+			if config.Source == gitConfigSource {
+				gitConfigOK = false
+			}
+		}
+	}
+
+	// Older versions managed ~/.gitconfig. Hand it over to the user (keeping
+	// what tools appended) only once ~/.config/git/config is in place, so a
+	// failure never leaves the user without the managed settings.
+	if gitConfigOK {
+		if err := migrateLegacyGitconfig(homeDir, cacheDir, command, force); err != nil {
+			fmt.Printf("❌ Error migrating ~/.gitconfig: %v\n", err)
 			hasErrors = true
 		}
 	}
@@ -513,10 +546,18 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 					fmt.Println("   Continuing anyway because --force was used.")
 				}
 			} else if os.IsNotExist(err) {
-				// Destination exists but no cache. First run for this tool? Back it up.
-				backupPath := config.Destination + ".bak"
-				fmt.Printf("   Backing up unmanaged file %s to %s\n", config.Destination, backupPath)
-				os.Rename(config.Destination, backupPath)
+				// Destination exists but no cache: a file dotfiles did not write.
+				if config.NoAdopt && !force {
+					return fmt.Errorf("%s exists and was not written by dotfiles. Move its settings to %s and delete it (or use --force to move it to %s.bak)",
+						config.Destination, adoptHint(config), config.Destination)
+				}
+				if command == "apply" {
+					if err := backup(config.Destination); err != nil {
+						return err
+					}
+				}
+			} else {
+				return fmt.Errorf("read cache %s: %w", cacheFile, err)
 			}
 		}
 	}
