@@ -110,7 +110,12 @@ missing, because without it `git config --global` would write into the managed f
 Older versions managed `~/.gitconfig` itself. `apply` migrates once: the managed part is removed,
 lines appended later (like the `gh` credential helper) are kept. If the managed part was edited,
 `apply` stops and asks you to move your settings to the end of the file, or `--force` moves the file
-to `~/.gitconfig.bak`.
+to `~/.gitconfig.bak` (never overwriting an existing `.bak`).
+
+Note: because `~/.gitconfig` wins, `git config --global user.email …` now quietly overrides the
+per-org emails. An existing `~/.config/git/config` that dotfiles did not write is an error (move its
+settings to `~/.gitconfig`). A non-default `XDG_CONFIG_HOME` is an error too, because git would then
+not read `~/.config/git/config`.
 
 ---
 

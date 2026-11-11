@@ -95,18 +95,20 @@ func TestMigrate_NoBaselineFails(t *testing.T) {
 	}
 }
 
-func TestMigrate_ForceMovesToBak(t *testing.T) {
-	edited := legacyBody + "# something\n"
-	home, cacheDir := legacySetup(t, "x"+edited, legacyBody) // header not at start: user-owned
+func TestMigrate_UserOwnedUntouchedEvenWithForce(t *testing.T) {
+	own := "[user]\n    name = Me\n"
+	home, cacheDir := legacySetup(t, own, legacyBody) // stale legacy cache, no header
 	if err := migrateLegacyGitconfig(home, cacheDir, "apply", true); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile(t, filepath.Join(home, ".gitconfig")); got != "x"+edited {
+	if got := readFile(t, filepath.Join(home, ".gitconfig")); got != own {
 		t.Error("a user-owned file must not be touched, even with --force")
 	}
+}
 
-	edited = strings.Replace(legacyBody, "Jane", "Janet", 1)
-	home, cacheDir = legacySetup(t, edited, legacyBody)
+func TestMigrate_ForceMovesToBak(t *testing.T) {
+	edited := strings.Replace(legacyBody, "Jane", "Janet", 1)
+	home, cacheDir := legacySetup(t, edited, legacyBody)
 	if err := migrateLegacyGitconfig(home, cacheDir, "apply", true); err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +119,101 @@ func TestMigrate_ForceMovesToBak(t *testing.T) {
 		t.Errorf("~/.gitconfig = %q", got)
 	}
 	cacheGone(t, cacheDir)
+}
+
+func TestMigrate_ForceRefusesToOverwriteBak(t *testing.T) {
+	edited := strings.Replace(legacyBody, "Jane", "Janet", 1)
+	home, cacheDir := legacySetup(t, edited, legacyBody)
+	bak := filepath.Join(home, ".gitconfig.bak")
+	if err := os.WriteFile(bak, []byte("PRECIOUS"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := migrateLegacyGitconfig(home, cacheDir, "apply", true)
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("want error about the existing .bak, got %v", err)
+	}
+	if readFile(t, bak) != "PRECIOUS" || readFile(t, filepath.Join(home, ".gitconfig")) != edited {
+		t.Error("files changed")
+	}
+}
+
+// git appends a key to the end of its section: a key added to the last
+// managed section lands after the managed part without a [section].
+func TestMigrate_KeyWithoutSectionFails(t *testing.T) {
+	home, cacheDir := legacySetup(t, legacyBody+"\tkeepBackup = false\n", legacyBody)
+	err := migrateLegacyGitconfig(home, cacheDir, "apply", false)
+	if err == nil || !strings.Contains(err.Error(), "not inside a [section]") {
+		t.Fatalf("want section error, got %v", err)
+	}
+}
+
+func TestMigrate_InvalidKeptFails(t *testing.T) {
+	if _, err := lookGit(); err != nil {
+		t.Skip("git not installed")
+	}
+	home, cacheDir := legacySetup(t, legacyBody+"[broken\n", legacyBody)
+	if err := migrateLegacyGitconfig(home, cacheDir, "apply", false); err == nil || !strings.Contains(err.Error(), "git rejects") {
+		t.Fatalf("want git error, got %v", err)
+	}
+}
+
+func TestMigrate_KeepsFileMode(t *testing.T) {
+	home, cacheDir := legacySetup(t, legacyBody, legacyBody)
+	p := filepath.Join(home, ".gitconfig")
+	if err := os.Chmod(p, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacyGitconfig(home, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	if fi, _ := os.Stat(p); fi.Mode().Perm() != 0600 {
+		t.Errorf("mode = %v", fi.Mode().Perm())
+	}
+}
+
+func TestCheckXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	for _, tc := range []struct {
+		val     string
+		wantErr bool
+	}{{"", false}, {filepath.Join(home, ".config"), false}, {filepath.Join(home, ".config") + "/", false}, {"/elsewhere", true}} {
+		t.Setenv("XDG_CONFIG_HOME", tc.val)
+		if err := checkXDGConfigHome(home); (err != nil) != tc.wantErr {
+			t.Errorf("XDG_CONFIG_HOME=%q: err = %v", tc.val, err)
+		}
+	}
+}
+
+func gitConfigEntry(home string) Config {
+	return Config{Source: gitConfigSource, Destination: filepath.Join(home, ".config", "git", "config"), NoAdopt: true}
+}
+
+func TestUnmanagedXDGGitConfigIsAnError(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := filepath.Join(home, "cache")
+	dest := filepath.Join(home, ".config", "git", "config")
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		t.Fatal(err)
+	}
+	own := "[core]\n    editor = vim\n"
+	if err := os.WriteFile(dest, []byte(own), 0644); err != nil {
+		t.Fatal(err)
+	}
+	data := TemplateData{Home: home, Name: "Jane", PersonalEmail: "j@example.com"}
+	err := processConfig(gitConfigEntry(home), data, cacheDir, "apply", false)
+	if err == nil || !strings.Contains(err.Error(), "~/.gitconfig") {
+		t.Fatalf("want error pointing to ~/.gitconfig, got %v", err)
+	}
+	if readFile(t, dest) != own {
+		t.Error("user's file changed")
+	}
+	// --force backs it up and deploys.
+	if err := processConfig(gitConfigEntry(home), data, cacheDir, "apply", true); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, dest+".bak") != own || !strings.Contains(readFile(t, dest), "name = Jane") {
+		t.Error("force did not back up and deploy")
+	}
 }
 
 func TestMigrate_CreatesMissingGitconfig(t *testing.T) {
