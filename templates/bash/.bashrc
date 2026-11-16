@@ -14,7 +14,16 @@ if [[ $- == *i* ]]; then
     # FZF Support
     if command -v fzf >/dev/null; then
         eval "$(fzf --bash)"
-        
+
+        # `fzf --bash` binds Ctrl-R to fzf's own history search, overwriting the
+        # binding Atuin installed in ~/.config/shell/common.sh. Atuin is the
+        # better history search, so hand Ctrl-R back to it (atuin-bind is
+        # defined by `atuin init bash`; Zsh never loads fzf's key bindings).
+        if declare -F atuin-bind >/dev/null; then
+            atuin-bind -m emacs '\C-r' atuin-search-emacs
+            atuin-bind -m vi-insert '\C-r' atuin-search-viins
+        fi
+
         # Intercept TAB to use FZF for file completion
         _fzf_comprun() {
             local command=$1

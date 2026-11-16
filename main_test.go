@@ -108,6 +108,26 @@ func TestAddManagedHeader(t *testing.T) {
 	}
 }
 
+func TestBashrcGivesCtrlRToAtuin(t *testing.T) {
+	// `fzf --bash` binds Ctrl-R to fzf's history widget, so the bash template
+	// must rebind it to Atuin *after* fzf was initialized.
+	body, err := templatesFS.ReadFile("templates/bash/.bashrc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fzfInit := strings.Index(string(body), "fzf --bash")
+	if fzfInit < 0 {
+		t.Fatal("no `fzf --bash` initialization in templates/bash/.bashrc")
+	}
+	atuinBind := strings.Index(string(body), `atuin-bind -m emacs '\C-r' atuin-search-emacs`)
+	if atuinBind < 0 {
+		t.Fatal("templates/bash/.bashrc does not bind Ctrl-R to Atuin")
+	}
+	if atuinBind < fzfInit {
+		t.Error("Ctrl-R is bound to Atuin before `fzf --bash` runs, so fzf wins")
+	}
+}
+
 func TestLoadUserConfig_UnknownKeyUnderOrg(t *testing.T) {
 	home := writeConfig(t, "config.toml", `
 name = "n"
