@@ -1,11 +1,19 @@
 #!/bin/sh
+# core.hooksPath (set globally by dotfiles) makes git ignore the hooks in
+# .git/hooks. If the repository has its own pre-commit hook (for example from
+# `pre-commit install`), run that one instead.
+hook="$(git rev-parse --git-common-dir)/hooks/pre-commit"
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+    exec "$hook" "$@"
+fi
+
 root=$(git rev-parse --show-toplevel)
 for config in prek.toml .pre-commit-config.yaml .pre-commit-config.yml; do
     if [ ! -f "$root/$config" ]; then
         continue
     fi
     if ! command -v prek >/dev/null 2>&1; then
-        echo "pre-commit hook: 'prek' not found on PATH — install it (see mise.toml) or commit with --no-verify" >&2
+        echo "pre-commit hook: 'prek' not found on PATH. Run 'dotfiles apply' to install it, or commit with --no-verify" >&2
         exit 1
     fi
     prek run --hook-stage pre-commit

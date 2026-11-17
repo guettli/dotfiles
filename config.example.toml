@@ -1,6 +1,12 @@
-# Copy to ~/.config/dotfiles/config.toml and edit.
+# ~/.config/dotfiles/config.toml. `dotfiles init` writes it for you.
 name = "Your Name"
 personal_email = "you@example.com"
+
+# "bash" (default) or "zsh".
+shell = "bash"
+
+# Optional: personal settings from templates/profiles/<name>/.
+# profile = "guettli"
 
 # One [[orgs]] table per organization. Repos whose remote URL matches `url`
 # use `email` for git commits (via ~/.gitconfig-org-<name>).

@@ -1,0 +1,9 @@
+#!/bin/sh
+# core.hooksPath (set globally by dotfiles) makes git ignore the hooks in
+# .git/hooks. Run the repository's own hook, for example one installed by
+# git-lfs or `pre-commit install`, so it keeps working.
+hook="$(git rev-parse --git-common-dir)/hooks/$(basename "$0")"
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+    exec "$hook" "$@"
+fi
+exit 0

@@ -21,3 +21,44 @@ jobs:
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet ./...
       - run: go test -race ./...
+
+  e2e:
+    # Install on a fresh machine like a new coworker would.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:24.04", "fedora:43"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ${{ matrix.image }}
+    env:
+      MISE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install system packages
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update && apt-get install -y curl git tar gzip ca-certificates
+          else
+            dnf install -y curl git tar gzip findutils
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go build -o /tmp/dotfiles .
+      - run: DOTFILES_BINARY=/tmp/dotfiles sh test/e2e.sh
+
+  goreleaser:
+    # The release config must stay valid.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: v2.19.0
+          args: release --snapshot --clean

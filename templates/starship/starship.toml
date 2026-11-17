@@ -44,3 +44,7 @@ up_to_date = ""
 stashed = " stashes"
 untracked = " untracked"
 modified = "m"
+
+# Plain symbol: the default needs a Nerd Font, which most terminals lack.
+[git_branch]
+symbol = "🌱 "

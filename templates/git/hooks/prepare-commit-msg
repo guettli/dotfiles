@@ -1,3 +1,10 @@
 #!/bin/sh
 email=$(git config user.email)
 echo "# Committing as: $email" >> "$1"
+
+# core.hooksPath (set globally by dotfiles) makes git ignore the hooks in
+# .git/hooks. Run the repository's own hook, so it keeps working.
+hook="$(git rev-parse --git-common-dir)/hooks/prepare-commit-msg"
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+    exec "$hook" "$@"
+fi

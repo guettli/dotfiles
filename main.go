@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -18,13 +21,25 @@ import (
 var templatesFS embed.FS
 
 type Config struct {
-	Source      string
+	Source string
+	// Extra embedded files appended to Source before rendering (profile
+	// additions).
+	Extra       []string
 	Destination string
-	Mode        os.FileMode
-	NoHeader    bool
+	// CacheKey names the baseline in the cache dir; defaults to Source. Needed
+	// when one template is deployed to several destinations.
+	CacheKey string
+	Mode     os.FileMode
+	NoHeader bool
 	// NoAdopt: an existing file which dotfiles did not write is an error
 	// (not backed up and replaced), unless --force.
 	NoAdopt bool
+	// LocalFile is the user's own, unmanaged companion file (~/.bashrc.local).
+	// Lines appended to Destination (by installers like conda or nvm) are
+	// moved there by apply, and the "local modification" error points to it.
+	LocalFile string
+	// Data is the template data; nil means the default TemplateData.
+	Data any
 }
 
 type OrgConfig struct {
@@ -35,9 +50,15 @@ type OrgConfig struct {
 }
 
 type UserConfig struct {
-	Name          string      `toml:"name"`
-	PersonalEmail string      `toml:"personal_email"`
-	Orgs          []OrgConfig `toml:"orgs"`
+	Name          string `toml:"name"`
+	PersonalEmail string `toml:"personal_email"`
+	// Shell is "bash" or "zsh". Empty: zsh if that is the login shell,
+	// otherwise bash. zsh files (and antidote) are only installed for zsh.
+	Shell string `toml:"shell,omitempty"`
+	// Profile adds the files from templates/profiles/<name>/ (personal PATH
+	// entries, git settings, ...). Empty: no profile.
+	Profile string      `toml:"profile,omitempty"`
+	Orgs    []OrgConfig `toml:"orgs,omitempty"`
 }
 
 type TemplateData struct {
@@ -46,6 +67,8 @@ type TemplateData struct {
 	Name          string
 	PersonalEmail string
 	Orgs          []OrgConfig
+	Shell         string
+	Profile       string
 }
 
 // configPaths returns the current (TOML) config path and the legacy (YAML)
@@ -125,7 +148,7 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	md, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it from config.example.toml in the dotfiles repo, or pass --config <path>", path, err)
+			return UserConfig{}, fmt.Errorf("could not read %s: %w\nCreate it with: dotfiles init", path, err)
 		}
 		return UserConfig{}, fmt.Errorf("could not parse %s: %w", path, err)
 	}
@@ -133,6 +156,19 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 	// struct field is a mistake (a typo, or a key removed in a format change).
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
 		return UserConfig{}, unknownFieldError(path, undecoded)
+	}
+
+	switch cfg.Shell {
+	case "":
+		cfg.Shell = defaultShell()
+	case "bash", "zsh":
+	default:
+		return UserConfig{}, fmt.Errorf("invalid shell %q in %s: use \"bash\" or \"zsh\"", cfg.Shell, path)
+	}
+	if cfg.Profile != "" {
+		if _, err := fs.ReadDir(templatesFS, "templates/profiles/"+cfg.Profile); err != nil || strings.ContainsAny(cfg.Profile, "/.") {
+			return UserConfig{}, fmt.Errorf("unknown profile %q in %s. Available: %s", cfg.Profile, path, strings.Join(availableProfiles(), ", "))
+		}
 	}
 
 	for i, org := range cfg.Orgs {
@@ -147,205 +183,6 @@ func loadUserConfig(homeDir string, configPath string) (UserConfig, error) {
 		cfg.Orgs[i].Host = parts[0]
 	}
 	return cfg, nil
-}
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: dotfiles [apply|diff] [--force] [--config <path>]")
-		os.Exit(1)
-	}
-
-	command := ""
-	force := false
-	configPath := ""
-	args := os.Args[1:]
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--force":
-			force = true
-		case "--config":
-			i++
-			if i >= len(args) {
-				fmt.Println("--config requires a path argument")
-				os.Exit(1)
-			}
-			configPath = args[i]
-		default:
-			if command == "" {
-				command = args[i]
-			}
-		}
-	}
-
-	if command != "apply" && command != "diff" {
-		fmt.Printf("Unknown command: %s\n", command)
-		fmt.Println("Usage: dotfiles [apply|diff] [--force] [--config <path>]")
-		os.Exit(1)
-	}
-
-	if command == "apply" {
-		fmt.Println("🚀 Applying dotfiles...")
-	} else {
-		fmt.Println("🔍 Diffing dotfiles...")
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Printf("Failed to get home directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	userConfig, err := loadUserConfig(homeDir, configPath)
-	if err != nil {
-		fmt.Printf("❌ %v\n", err)
-		os.Exit(1)
-	}
-
-	// Antidote (zsh plugin manager) is not in the mise registry; install it as a
-	// plain git clone into ~/.antidote, matching what .zshrc sources.
-	if err := ensureAntidote(homeDir, command); err != nil {
-		fmt.Printf("⚠️ Could not set up antidote: %v\n", err)
-	}
-
-	cacheDir := filepath.Join(homeDir, ".local", "state", "dotfiles", "installed_cache")
-
-	templateData := TemplateData{
-		User:          os.Getenv("USER"),
-		Home:          homeDir,
-		Name:          userConfig.Name,
-		PersonalEmail: userConfig.PersonalEmail,
-		Orgs:          userConfig.Orgs,
-	}
-
-	configs := []Config{
-		{
-			// Base tools live in a file dotfiles owns; `mise install` (run below)
-			// installs them. The user's own tools go in ~/.config/mise/config.toml
-			// via `mise use -g`, which dotfiles never touches.
-			Source:      "templates/mise/dotfiles.toml",
-			Destination: filepath.Join(homeDir, ".config", "mise", "conf.d", "dotfiles.toml"),
-		},
-		{
-			Source:      "templates/zsh/.zshrc",
-			Destination: filepath.Join(homeDir, ".zshrc"),
-		},
-		{
-			Source:      "templates/zsh/plugins.txt",
-			Destination: filepath.Join(homeDir, ".config", "zsh", "plugins.txt"),
-		},
-		{
-			Source:      "templates/bash/.bashrc",
-			Destination: filepath.Join(homeDir, ".bashrc"),
-		},
-		{
-			Source:      "templates/shell/common.sh",
-			Destination: filepath.Join(homeDir, ".config", "shell", "common.sh"),
-		},
-		{
-			Source:      "templates/starship/starship.toml",
-			Destination: filepath.Join(homeDir, ".config", "starship.toml"),
-		},
-		{
-			Source:      "templates/atuin/config.toml",
-			Destination: filepath.Join(homeDir, ".config", "atuin", "config.toml"),
-		},
-		{
-			Source:      "templates/direnv/direnv.toml",
-			Destination: filepath.Join(homeDir, ".config", "direnv", "direnv.toml"),
-		},
-		{
-			Source:      "templates/tmux/tmux.conf",
-			Destination: filepath.Join(homeDir, ".tmux.conf"),
-		},
-		{
-			Source:      "templates/ripgrep/ripgreprc",
-			Destination: filepath.Join(homeDir, ".config", "ripgrep", "ripgreprc"),
-			NoHeader:    true,
-		},
-		{
-			// Git reads ~/.config/git/config AND ~/.gitconfig (the latter wins).
-			// dotfiles owns the first; ~/.gitconfig belongs to the user and to
-			// tools like `gh auth setup-git`, so they never collide with apply.
-			Source:      "templates/git/config",
-			Destination: filepath.Join(homeDir, ".config", "git", "config"),
-			// git itself writes --global settings here if ~/.gitconfig is
-			// missing: such a file holds the user's settings, don't hide
-			// them in a .bak.
-			NoAdopt: true,
-		},
-		{
-			Source:      "templates/git/hooks/prepare-commit-msg",
-			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "prepare-commit-msg"),
-			Mode:        0755,
-		},
-		{
-			Source:      "templates/git/hooks/pre-commit",
-			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "pre-commit"),
-			Mode:        0755,
-		},
-	}
-
-	hasErrors := false
-
-	gitConfigOK := true
-	if err := checkXDGConfigHome(homeDir); err != nil {
-		fmt.Printf("❌ %v\n", err)
-		hasErrors = true
-		gitConfigOK = false
-	}
-
-	for _, config := range configs {
-		if config.Source == gitConfigSource && !gitConfigOK {
-			continue
-		}
-		err := processConfig(config, templateData, cacheDir, command, force)
-		if err != nil {
-			fmt.Printf("❌ Error processing %s: %v\n", config.Source, err)
-			hasErrors = true
-			if config.Source == gitConfigSource {
-				gitConfigOK = false
-			}
-		}
-	}
-
-	// Older versions managed ~/.gitconfig. Hand it over to the user (keeping
-	// what tools appended) only once ~/.config/git/config is in place, so a
-	// failure never leaves the user without the managed settings.
-	if gitConfigOK {
-		if err := migrateLegacyGitconfig(homeDir, cacheDir, command, force); err != nil {
-			fmt.Printf("❌ Error migrating ~/.gitconfig: %v\n", err)
-			hasErrors = true
-		}
-	}
-
-	for _, org := range userConfig.Orgs {
-		orgConfig := Config{
-			Source:      "templates/git/gitconfig-org",
-			Destination: filepath.Join(homeDir, ".gitconfig-org-"+org.Name),
-		}
-		err := processConfig(orgConfig, struct{ Email string }{org.Email}, cacheDir, command, force)
-		if err != nil {
-			fmt.Printf("❌ Error processing org config for %s: %v\n", org.URL, err)
-			hasErrors = true
-		}
-	}
-
-	// Tools are declared in ~/.config/mise/conf.d/dotfiles.toml (deployed above).
-	// mise decides what is missing and installs it — no tool bookkeeping here.
-	if err := runMise(command); err != nil {
-		fmt.Printf("⚠️ %v\n", err)
-	}
-
-	if hasErrors {
-		fmt.Println("⚠️ Finished with errors.")
-		os.Exit(1)
-	}
-
-	if command == "apply" {
-		fmt.Println("🎉 Apply complete!")
-	} else {
-		fmt.Println("🎉 Diff complete!")
-	}
 }
 
 // runMise installs the tools declared in mise's config. On diff it only reports
@@ -482,39 +319,56 @@ func addManagedHeader(content []byte) []byte {
 	return out
 }
 
-func processConfig(config Config, data any, cacheDir string, command string, force bool) error {
-	// 1. Render the template
+// renderConfig renders config.Source (plus its Extra files) with data and adds
+// the managed header.
+func renderConfig(config Config, data any) ([]byte, error) {
 	contentBytes, err := templatesFS.ReadFile(config.Source)
 	if err != nil {
-		return fmt.Errorf("failed to read embedded file: %w", err)
+		return nil, fmt.Errorf("failed to read embedded file: %w", err)
+	}
+	for _, extra := range config.Extra {
+		b, err := templatesFS.ReadFile(extra)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read embedded file: %w", err)
+		}
+		contentBytes = append(append(contentBytes[:len(contentBytes):len(contentBytes)], '\n'), b...)
 	}
 
 	tmpl, err := template.New(filepath.Base(config.Source)).Parse(string(contentBytes))
 	if err != nil {
-		return fmt.Errorf("failed to parse template: %w", err)
+		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
 
 	var renderedBuffer bytes.Buffer
 	if err := tmpl.Execute(&renderedBuffer, data); err != nil {
-		return fmt.Errorf("failed to execute template: %w", err)
+		return nil, fmt.Errorf("failed to execute template: %w", err)
 	}
 	renderedContent := renderedBuffer.Bytes()
 	if !config.NoHeader {
 		renderedContent = addManagedHeader(renderedContent)
 	}
+	return renderedContent, nil
+}
 
-	// Ensure destination directory exists
-	destDir := filepath.Dir(config.Destination)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+func cacheFileFor(config Config, cacheDir string) string {
+	key := config.CacheKey
+	if key == "" {
+		key = config.Source
+	}
+	return filepath.Join(cacheDir, key)
+}
+
+func processConfig(config Config, data any, cacheDir string, command string, force bool) error {
+	if config.Data != nil {
+		data = config.Data
+	}
+	// 1. Render the template
+	renderedContent, err := renderConfig(config, data)
+	if err != nil {
+		return err
 	}
 
-	cacheFile := filepath.Join(cacheDir, config.Source)
-
-	// Create cache dir structure
-	if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err != nil {
-		return fmt.Errorf("failed to create cache directory: %w", err)
-	}
+	cacheFile := cacheFileFor(config, cacheDir)
 
 	if command == "diff" {
 		return runDiffCommand(config.Destination, renderedContent, "Current File", "Template Render")
@@ -522,39 +376,49 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 
 	// command == "apply"
 
+	// Ensure destination directory exists
+	destDir := filepath.Dir(config.Destination)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+	}
+	// Create cache dir structure
+	if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
 	newFile := config.Destination + ".new"
 
 	// 2. Check for local modifications if destination exists
-	if fileInfo, err := os.Stat(config.Destination); err == nil {
+	if fileInfo, err := os.Lstat(config.Destination); err == nil {
 		if fileInfo.Mode()&os.ModeSymlink != 0 {
-			// It's a symlink. We'll replace it.
-			os.Remove(config.Destination)
+			// A symlink (GNU stow, another dotfiles tool). Writing would change
+			// the link target; move the link itself to the backup instead.
+			if _, err := backupFile(cacheDir, config.Destination); err != nil {
+				return err
+			}
 		} else if destBytes, err := os.ReadFile(config.Destination); err == nil && !bytes.Equal(destBytes, renderedContent) {
 			// Destination differs from what we'd write. Only a problem if it also
 			// diverges from the last applied baseline — otherwise it's just a
 			// normal template update (or the cache is stale) and is safe to overwrite.
 			if cacheBytes, err := os.ReadFile(cacheFile); err == nil {
 				if !bytes.Equal(cacheBytes, destBytes) {
-					fmt.Printf("\n⚠️ LOCAL MODIFICATION DETECTED: %s\n", config.Destination)
-					if err := os.WriteFile(newFile, renderedContent, 0644); err != nil {
-						return fmt.Errorf("failed to write %s for diffing: %w", newFile, err)
+					if err := handleLocalModification(config, cacheDir, cacheBytes, destBytes, renderedContent, newFile, force); err != nil {
+						return err
 					}
-					fmt.Printf("   To see diff execute:\n   diff %s %s\n", config.Destination, newFile)
-					if !force {
-						return fmt.Errorf("local modifications detected in %s. Please sync them to templates or revert them (or use --force to overwrite)", config.Destination)
-					}
-					fmt.Println("   Continuing anyway because --force was used.")
 				}
 			} else if os.IsNotExist(err) {
 				// Destination exists but no cache: a file dotfiles did not write.
 				if config.NoAdopt && !force {
-					return fmt.Errorf("%s exists and was not written by dotfiles. Move its settings to %s and delete it (or use --force to move it to %s.bak)",
-						config.Destination, adoptHint(config), config.Destination)
+					return fmt.Errorf("%s exists and was not written by dotfiles. Move its settings to %s and delete it (or use --force to back it up and replace it)",
+						config.Destination, adoptHint(config))
 				}
-				if command == "apply" {
-					if err := backup(config.Destination); err != nil {
-						return err
-					}
+				bak, err := backupFile(cacheDir, config.Destination)
+				if err != nil {
+					return err
+				}
+				if config.LocalFile != "" {
+					fmt.Printf("   Your old %s was saved to %s. If it had settings you need (conda, nvm, ...), copy them to %s\n",
+						tildePath(config.Destination), tildePath(bak), tildePath(config.LocalFile))
 				}
 			} else {
 				return fmt.Errorf("read cache %s: %w", cacheFile, err)
@@ -579,8 +443,7 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 		return nil
 	}
 
-	err = os.WriteFile(config.Destination, renderedContent, mode)
-	if err != nil {
+	if err := writeFileAtomic(config.Destination, renderedContent, mode); err != nil {
 		return fmt.Errorf("failed to write destination file: %w", err)
 	}
 	os.Remove(newFile)
@@ -593,6 +456,123 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 
 	fmt.Printf("✅ Applied %s\n", config.Destination)
 	return nil
+}
+
+// handleLocalModification deals with a destination which differs from what
+// dotfiles wrote last time (cacheBytes). Lines appended at the end (what
+// installers do) are moved to config.LocalFile. Other edits are an error,
+// unless force: then the edited file is backed up and replaced.
+func handleLocalModification(config Config, cacheDir string, cacheBytes, destBytes, renderedContent []byte, newFile string, force bool) error {
+	if config.LocalFile != "" && bytes.HasPrefix(destBytes, cacheBytes) {
+		tail := destBytes[len(cacheBytes):]
+		if len(bytes.TrimSpace(tail)) > 0 {
+			if err := appendToLocalFile(config.LocalFile, config.Destination, tail); err != nil {
+				return err
+			}
+			fmt.Printf("   Moved the lines appended to %s into %s\n", tildePath(config.Destination), tildePath(config.LocalFile))
+		}
+		return nil
+	}
+
+	fmt.Printf("\n⚠️ LOCAL MODIFICATION DETECTED: %s\n", config.Destination)
+	if err := os.WriteFile(newFile, renderedContent, 0644); err != nil {
+		return fmt.Errorf("failed to write %s for diffing: %w", newFile, err)
+	}
+	fmt.Printf("   To see diff execute:\n   diff %s %s\n", config.Destination, newFile)
+	if !force {
+		where := "the dotfiles templates"
+		if config.LocalFile != "" {
+			where = config.LocalFile + " (dotfiles never touches that file)"
+		}
+		return fmt.Errorf("local modifications detected in %s. Move your changes to %s, or use --force to back up your version and overwrite it", config.Destination, where)
+	}
+	bak, err := backupFile(cacheDir, config.Destination)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("   Continuing anyway because --force was used. Your version was saved to %s\n", bak)
+	return nil
+}
+
+// appendToLocalFile appends lines which were added to dest to the user's own
+// local file.
+func appendToLocalFile(localFile, dest string, tail []byte) error {
+	if err := os.MkdirAll(filepath.Dir(localFile), 0755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(localFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	block := fmt.Sprintf("\n# Moved here from %s by `dotfiles apply` on %s\n", tildePath(dest), time.Now().Format("2006-01-02"))
+	block += strings.TrimLeft(string(tail), "\n")
+	if !strings.HasSuffix(block, "\n") {
+		block += "\n"
+	}
+	if _, err := f.WriteString(block); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// backupRoot is where dotfiles keeps copies of files it replaced.
+func backupRoot(cacheDir string) string {
+	return filepath.Join(filepath.Dir(cacheDir), "backup")
+}
+
+// backupPath is the backup location of the first version of path that
+// dotfiles replaced (the one `dotfiles uninstall` restores).
+func backupPath(cacheDir, path string) string {
+	return filepath.Join(backupRoot(cacheDir), path)
+}
+
+// backupFile moves path below the backup directory, mirroring its absolute
+// path. The first backup of a path keeps the plain name (uninstall restores
+// it); later ones get a timestamp suffix. Symlinks are moved as links.
+func backupFile(cacheDir, path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	dst := backupPath(cacheDir, abs)
+	if _, err := os.Lstat(dst); err == nil {
+		dst += "." + time.Now().Format("20060102-150405.000000000")
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return "", err
+	}
+	if err := os.Rename(abs, dst); err != nil {
+		// Different file system: copy, then remove.
+		info, lerr := os.Lstat(abs)
+		if lerr != nil {
+			return "", fmt.Errorf("back up %s: %w", abs, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(abs)
+			if err != nil {
+				return "", err
+			}
+			if err := os.Symlink(target, dst); err != nil {
+				return "", err
+			}
+		} else {
+			b, err := os.ReadFile(abs)
+			if err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(dst, b, info.Mode().Perm()); err != nil {
+				return "", err
+			}
+		}
+		if err := os.Remove(abs); err != nil {
+			return "", err
+		}
+	}
+	fmt.Printf("   Backed up %s to %s\n", tildePath(abs), tildePath(dst))
+	return dst, nil
 }
 
 func runDiffCommand(destPath string, compareContent []byte, labelA string, labelB string) error {
@@ -632,4 +612,41 @@ func runDiffCommand(destPath string, compareContent []byte, labelA string, label
 
 	fmt.Printf("   %s is up to date.\n", destPath)
 	return nil
+}
+
+// defaultShell is zsh if that is the login shell, otherwise bash.
+func defaultShell() string {
+	if filepath.Base(loginShell()) == "zsh" {
+		return "zsh"
+	}
+	return "bash"
+}
+
+// loginShell returns the user's login shell from the passwd database, falling
+// back to $SHELL.
+func loginShell() string {
+	u := os.Getenv("USER")
+	if cur, err := user.Current(); err == nil {
+		u = cur.Username
+	}
+	if u != "" {
+		if out, err := exec.Command("getent", "passwd", u).Output(); err == nil {
+			fields := strings.Split(strings.TrimSpace(string(out)), ":")
+			if len(fields) >= 7 && fields[6] != "" {
+				return fields[6]
+			}
+		}
+	}
+	return os.Getenv("SHELL")
+}
+
+func availableProfiles() []string {
+	entries, _ := fs.ReadDir(templatesFS, "templates/profiles")
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names
 }

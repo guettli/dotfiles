@@ -211,7 +211,7 @@ func TestUnmanagedXDGGitConfigIsAnError(t *testing.T) {
 	if err := processConfig(gitConfigEntry(home), data, cacheDir, "apply", true); err != nil {
 		t.Fatal(err)
 	}
-	if readFile(t, dest+".bak") != own || !strings.Contains(readFile(t, dest), "name = Jane") {
+	if readFile(t, backupPath(cacheDir, dest)) != own || !strings.Contains(readFile(t, dest), "name = Jane") {
 		t.Error("force did not back up and deploy")
 	}
 }
