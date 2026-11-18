@@ -7,8 +7,6 @@ pathadd() {
     esac
 }
 pathadd "$HOME/projects/git-tips/scripts"
-pathadd "$HOME/syself/app-catalog/scripts"
-pathadd "$HOME/syself/dotfiles/bin"
 pathadd "$HOME/scripts"
 unset -f pathadd
 export PATH
