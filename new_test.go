@@ -380,3 +380,43 @@ func TestAppendedLinesLocalFileError(t *testing.T) {
 		t.Error("line not moved")
 	}
 }
+
+// Renovate bumps exact versions in templates/mise/dotfiles.toml; "latest"
+// would never be updated and differs between machines.
+func TestBaseToolsArePinned(t *testing.T) {
+	tools, err := baseMiseTools()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) == 0 {
+		t.Fatal("no tools")
+	}
+	for _, tool := range tools {
+		if _, ok := parseSemverLoose(tool.Version); !ok {
+			t.Errorf("%s: version %q is not pinned", tool.Name, tool.Version)
+		}
+	}
+}
+
+// parseSemverLoose accepts "1", "1.2" and "1.2.3", plus a trailing letter
+// (tmux: "3.8", "3.8a").
+func parseSemverLoose(v string) ([]int, bool) {
+	var out []int
+	if n := len(v); n > 1 && v[n-1] >= 'a' && v[n-1] <= 'z' {
+		v = v[:n-1]
+	}
+	for _, p := range strings.Split(v, ".") {
+		n := 0
+		if p == "" {
+			return nil, false
+		}
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				return nil, false
+			}
+			n = n*10 + int(c-'0')
+		}
+		out = append(out, n)
+	}
+	return out, len(out) >= 1 && len(out) <= 3
+}

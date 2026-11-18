@@ -148,11 +148,11 @@ func checkMise(d *doctor) {
 	var missing []string
 	for _, tool := range tools {
 		if !miseToolInstalled(tool) {
-			missing = append(missing, tool)
+			missing = append(missing, tool.String())
 		}
 	}
 	if len(missing) > 0 {
-		d.warn("dotfiles apply", "tools not installed: %s", strings.Join(missing, ", "))
+		d.warn("dotfiles apply", "tools missing or outdated: %s", strings.Join(missing, ", "))
 	} else {
 		d.ok("all %d tools installed", len(tools))
 	}

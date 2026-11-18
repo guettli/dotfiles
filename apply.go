@@ -174,8 +174,16 @@ func runApplyOrDiff(command string, args []string) int {
 
 	// Tools are declared in ~/.config/mise/conf.d/dotfiles.toml (deployed above).
 	// mise decides what is missing and installs it — no tool bookkeeping here.
+	// A failed install is an error of apply (the fleet's timer alerts on it):
+	// with pinned versions, a pin without a download would otherwise fail
+	// silently everywhere.
 	if err := runMise(command); err != nil {
-		fmt.Printf("⚠️ %v\n", err)
+		if command == "apply" {
+			fmt.Printf("❌ %v\n", err)
+			hasErrors = true
+		} else {
+			fmt.Printf("⚠️ %v\n", err)
+		}
 	}
 
 	if hasErrors {
