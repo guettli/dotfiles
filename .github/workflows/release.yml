@@ -1,11 +1,24 @@
 name: Release
 
+# Every push to main is released: Renovate's tool bumps (and everything else)
+# reach users only through a release (`dotfiles update`, install.sh, and the
+# sandbox fleet's `go run ...@latest`). HEAD without a v* tag gets the next
+# patch version; a v* tag pushed by hand is released as it is.
+#
+# Tag and release happen in this one job: a tag pushed with GITHUB_TOKEN does
+# not trigger other workflows.
+
 on:
   push:
+    branches: [main]
     tags: ["v*"]
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -18,7 +31,30 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - run: go test ./...
+      - name: Tag HEAD unless it is released already
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(git tag --points-at HEAD --list 'v*' | sort -V | tail -n1)
+          if [ -n "$tag" ] && gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag is released already"
+            echo "release=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$tag" ]; then
+            latest=$(git tag --list 'v*' | sort -V | tail -n1)
+            latest=${latest:-v0.0.0}
+            IFS=. read -r major minor patch <<<"${latest#v}"
+            tag="v${major}.${minor}.$((patch + 1))"
+            git tag "$tag"
+            git push origin "$tag"
+          fi
+          echo "Releasing $tag"
+          echo "release=true" >>"$GITHUB_OUTPUT"
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        if: steps.tag.outputs.release == 'true'
         with:
           version: v2.19.0
           args: release --clean

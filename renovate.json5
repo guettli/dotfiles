@@ -1,0 +1,53 @@
+// Renovate config. Renovate runs self-hosted from guettli/gitops
+// (.github/workflows/renovate.yml, job renovate-dotfiles, no commands
+// allowed).
+//
+// It keeps the tool versions in templates/mise/dotfiles.toml current (the
+// tools every dotfiles user gets), plus Go modules and GitHub Actions. Weekly,
+// grouped into few PRs, 14 days after a release. A merged PR is released
+// automatically (.github/workflows/release.yml); users get it with
+// `dotfiles update`, the sandbox fleet with its next `go run ...@latest`.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
+  timezone: "Europe/Berlin",
+  schedule: ["before 6am on monday"],
+  minimumReleaseAge: "14 days",
+  prConcurrentLimit: 5,
+  postUpdateOptions: ["gomodTidy"],
+  // A merge releases to every user: a human merges, after green CI (the e2e
+  // job installs the tools on Ubuntu and Fedora).
+  automerge: false,
+  mise: {
+    // The tool list is a template deployed to
+    // ~/.config/mise/conf.d/dotfiles.toml, not a mise.toml of this repo.
+    managerFilePatterns: ["/^templates/mise/dotfiles\\.toml$/"],
+  },
+  packageRules: [
+    {
+      matchManagers: ["mise"],
+      groupName: "shell tools",
+    },
+    {
+      // A tool's major release can change behaviour users rely on: its own PR.
+      matchManagers: ["mise"],
+      matchUpdateTypes: ["major"],
+      groupName: null,
+    },
+    {
+      matchManagers: ["gomod"],
+      matchDepTypes: ["toolchain"],
+      matchUpdateTypes: ["major", "minor"],
+      enabled: false,
+    },
+    {
+      matchManagers: ["gomod"],
+      matchDepTypes: ["require", "indirect"],
+      groupName: "go modules",
+    },
+    {
+      matchManagers: ["github-actions"],
+      groupName: "actions",
+    },
+  ],
+}

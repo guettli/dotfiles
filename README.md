@@ -121,6 +121,10 @@ The base tools are declared in [`templates/mise/dotfiles.toml`](templates/mise/d
 which `apply` deploys to `~/.config/mise/conf.d/dotfiles.toml` before it runs `mise install`.
 Your own tools (`mise use -g`) go to `~/.config/mise/config.toml`, which dotfiles never touches.
 
+The versions are pinned. [Renovate](renovate.json5) opens a weekly PR when new versions are out,
+at least 14 days old. Every merge to main is released, and `dotfiles update` brings the new
+versions to your machine.
+
 ## Git
 
 dotfiles manages `~/.config/git/config`. `~/.gitconfig` is yours: git reads both, and settings in
@@ -186,5 +190,6 @@ go run . apply
 ```
 
 `test/e2e.sh` installs everything into a fresh machine (CI runs it in Ubuntu and Fedora
-containers). Releases are built by [GoReleaser](https://goreleaser.com/) when a `v*` tag is
-pushed.
+containers). Every push to main is released: it gets the next patch version and
+[GoReleaser](https://goreleaser.com/) builds the binaries. Push a `v*` tag yourself for a
+minor or major version.

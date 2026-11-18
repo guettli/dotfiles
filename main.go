@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -203,7 +204,7 @@ func runMise(command string) error {
 		var missing []string
 		for _, tool := range tools {
 			if !miseToolInstalled(tool) {
-				missing = append(missing, tool)
+				missing = append(missing, tool.String())
 			}
 		}
 		if len(missing) == 0 {
@@ -220,6 +221,11 @@ func runMise(command string) error {
 	// command == "apply"
 	fmt.Println("📦 Installing mise tools...")
 	cmd := exec.Command("mise", "install")
+	// In the home directory: a project's mise.toml in the current directory
+	// is not part of the base set.
+	if home, err := os.UserHomeDir(); err == nil {
+		cmd.Dir = home
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -229,38 +235,75 @@ func runMise(command string) error {
 	return nil
 }
 
-// baseMiseTools returns the tool names declared in the embedded
+// miseTool is a tool of the base set and its pinned version.
+type miseTool struct {
+	Name    string
+	Version string
+}
+
+func (t miseTool) String() string { return t.Name + "@" + t.Version }
+
+// baseMiseTools returns the tools declared in the embedded
 // templates/mise/dotfiles.toml [tools] table — the single source of truth for
-// the base set, sorted for stable output.
-func baseMiseTools() ([]string, error) {
+// the base set, sorted by name for stable output.
+func baseMiseTools() ([]miseTool, error) {
 	data, err := templatesFS.ReadFile("templates/mise/dotfiles.toml")
 	if err != nil {
 		return nil, err
 	}
 	var doc struct {
-		Tools map[string]any `toml:"tools"`
+		Tools map[string]string `toml:"tools"`
 	}
 	if err := toml.Unmarshal(data, &doc); err != nil {
 		return nil, err
 	}
-	tools := make([]string, 0, len(doc.Tools))
-	for name := range doc.Tools {
-		tools = append(tools, name)
+	tools := make([]miseTool, 0, len(doc.Tools))
+	for name, version := range doc.Tools {
+		tools = append(tools, miseTool{Name: name, Version: version})
 	}
-	sort.Strings(tools)
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	return tools, nil
 }
 
-// miseToolInstalled reports whether mise has any version of tool installed. It
-// asks mise directly (`mise ls <tool> --installed`), which is independent of
-// which config file declares the tool.
-func miseToolInstalled(tool string) bool {
-	out, err := exec.Command("mise", "ls", tool, "--installed", "-J").Output()
+// miseToolInstalled reports whether the tool is installed in the version
+// mise uses for it. That is the pinned version, unless the user's own mise
+// config (`mise use -g`) asks for another one: then that is the user's choice
+// and only has to be installed. mise runs in the home directory, so a project's
+// mise.toml in the current directory does not count.
+func miseToolInstalled(tool miseTool) bool {
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
 	}
-	s := strings.TrimSpace(string(out))
-	return s != "" && s != "[]"
+	cmd := exec.Command("mise", "ls", tool.Name, "-J")
+	cmd.Dir = home
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	var entries []struct {
+		Version   string `json:"version"`
+		Installed bool   `json:"installed"`
+		Active    bool   `json:"active"`
+		Source    struct {
+			Path string `json:"path"`
+		} `json:"source"`
+	}
+	if err := json.Unmarshal(out, &entries); err != nil {
+		return false
+	}
+	ours := filepath.Join(home, ".config", "mise", "conf.d", "dotfiles.toml")
+	for _, e := range entries {
+		if e.Active && e.Source.Path != "" && e.Source.Path != ours {
+			return e.Installed
+		}
+	}
+	for _, e := range entries {
+		if e.Installed && (tool.Version == "latest" || e.Version == tool.Version) {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureAntidote makes sure the antidote zsh plugin manager is available at

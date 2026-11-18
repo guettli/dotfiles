@@ -2,18 +2,21 @@
 # to install them. Your own / environment-specific tools do NOT belong here —
 # add them with `mise use -g <tool>`, which writes ~/.config/mise/config.toml
 # (a separate file that dotfiles never manages).
+#
+# Exact versions, bumped by Renovate (renovate.json5). Every merge to main is
+# released, and `dotfiles update` brings the new versions to a machine.
 [tools]
-starship = "latest"
-atuin = "latest"
-direnv = "latest"
-tmux = "latest"
-ripgrep = "latest"
-fd = "latest"
-fzf = "latest"
-bat = "latest"
-eza = "latest"
-zoxide = "latest"
-micro = "latest"
-tealdeer = "latest"
-lazygit = "latest"
-prek = "latest"
+starship = "1.27.0"
+atuin = "18.24.8"
+direnv = "2.38.2"
+tmux = "3.8"
+ripgrep = "15.2.0"
+fd = "10.5.2"
+fzf = "0.75.0"
+bat = "0.26.1"
+eza = "0.23.5"
+zoxide = "0.10.0"
+micro = "2.0.15"
+tealdeer = "1.9.1"
+lazygit = "0.66.3"
+prek = "0.5.11"
