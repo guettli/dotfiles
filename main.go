@@ -232,7 +232,30 @@ func runMise(command string) error {
 		return fmt.Errorf("mise install failed: %w", err)
 	}
 	fmt.Println("✅ mise tools installed!")
+	pruneOldVersions()
 	return nil
+}
+
+// pruneOldVersions removes versions of the base tools which no config uses any
+// more, so the weekly Renovate bumps don't pile up. `mise prune` keeps every
+// version a tracked config (a project's mise.toml) still asks for. Failures
+// only cost disk space, so they are reported, not fatal.
+func pruneOldVersions() {
+	tools, err := baseMiseTools()
+	if err != nil {
+		return
+	}
+	args := []string{"prune", "--yes"}
+	for _, t := range tools {
+		args = append(args, t.Name)
+	}
+	cmd := exec.Command("mise", args...)
+	if home, err := os.UserHomeDir(); err == nil {
+		cmd.Dir = home
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("⚠️ mise prune failed (old tool versions stay installed): %v\n%s", err, out)
+	}
 }
 
 // miseTool is a tool of the base set and its pinned version.

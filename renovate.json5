@@ -35,6 +35,20 @@
       groupName: null,
     },
     {
+      // Same for 0.x tools (fzf, bat, eza, zoxide, lazygit, prek), where a
+      // minor release is the breaking one.
+      matchManagers: ["mise"],
+      matchCurrentVersion: "<1.0.0",
+      matchUpdateTypes: ["minor"],
+      groupName: null,
+    },
+    {
+      // tmux releases bug fixes as 3.8a, 3.8b: semver would skip those.
+      matchManagers: ["mise"],
+      matchDepNames: ["tmux"],
+      versioning: "deb",
+    },
+    {
       matchManagers: ["gomod"],
       matchDepTypes: ["toolchain"],
       matchUpdateTypes: ["major", "minor"],

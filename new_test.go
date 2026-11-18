@@ -398,9 +398,13 @@ func TestBaseToolsArePinned(t *testing.T) {
 	}
 }
 
-// parseSemverLoose accepts "1", "1.2" and "1.2.3" (tmux has no patch number).
+// parseSemverLoose accepts "1", "1.2" and "1.2.3", plus a trailing letter
+// (tmux: "3.8", "3.8a").
 func parseSemverLoose(v string) ([]int, bool) {
 	var out []int
+	if n := len(v); n > 1 && v[n-1] >= 'a' && v[n-1] <= 'z' {
+		v = v[:n-1]
+	}
 	for _, p := range strings.Split(v, ".") {
 		n := 0
 		if p == "" {
