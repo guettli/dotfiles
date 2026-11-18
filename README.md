@@ -145,7 +145,7 @@ dotfiles leaves them alone.
 
 You don't need `prek install` or `pre-commit install`: the global hook already runs prek in
 every repository with a `.pre-commit-config.yaml` (or `prek.toml`). Both commands refuse to run
-while `core.hooksPath` is set ("Cowardly refusing to install hooks"), and they are right to: they
+while `core.hooksPath` is set globally, and they are right to: they
 would overwrite the shared hooks of all your repositories. If a repository needs its own hooks
 anyway, set the hooks path for that repository only; a repository setting wins over the global
 one:
