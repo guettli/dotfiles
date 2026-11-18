@@ -1,3 +1,7 @@
+# Your own settings belong in ~/.zshrc.local (or ~/.config/shell/local.sh for
+# bash and zsh). dotfiles never touches those files. Lines which installers
+# append to this file are moved to ~/.zshrc.local by the next `dotfiles apply`.
+
 # Source common configuration
 if [[ -f "$HOME/.config/shell/common.sh" ]]; then
     source "$HOME/.config/shell/common.sh"
@@ -57,3 +61,8 @@ if [[ -o interactive ]]; then
 fi
 
 skip_global_compinit=1
+
+# Your own settings (not managed by dotfiles).
+if [[ -f "$HOME/.zshrc.local" ]]; then
+    source "$HOME/.zshrc.local"
+fi

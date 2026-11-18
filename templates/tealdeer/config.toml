@@ -1,0 +1,4 @@
+# Download the tldr pages on first use, refresh them weekly.
+[updates]
+auto_update = true
+auto_update_interval_hours = 168

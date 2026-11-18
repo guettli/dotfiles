@@ -1,0 +1,4 @@
+# Profile "guettli": trust every .envrc without `direnv allow`.
+# Dangerous: a cloned repository can run code when you cd into it.
+[whitelist]
+prefix = [ "/" ]

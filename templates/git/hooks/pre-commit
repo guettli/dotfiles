@@ -5,9 +5,16 @@ for config in prek.toml .pre-commit-config.yaml .pre-commit-config.yml; do
         continue
     fi
     if ! command -v prek >/dev/null 2>&1; then
-        echo "pre-commit hook: 'prek' not found on PATH — install it (see mise.toml) or commit with --no-verify" >&2
+        echo "pre-commit hook: 'prek' not found on PATH. Run 'dotfiles apply' to install it, or commit with --no-verify" >&2
         exit 1
     fi
     prek run --hook-stage pre-commit
     exit $?
 done
+
+# No pre-commit config. core.hooksPath (set globally by dotfiles) makes git
+# ignore .git/hooks, so run the repository's own pre-commit hook, if any.
+hook="$(git rev-parse --git-common-dir)/hooks/pre-commit"
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+    exec "$hook" "$@"
+fi
