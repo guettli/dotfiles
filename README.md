@@ -125,6 +125,14 @@ The versions are pinned. [Renovate](renovate.json5) opens a weekly PR when new v
 at least 14 days old. Every merge to main is released, and `dotfiles update` brings the new
 versions to your machine.
 
+### kubectl completion
+
+If `kubectl` is installed (dotfiles doesn't install it), `apply` saves its completion script in
+`~/.cache/dotfiles/completions/` and the shell loads it at startup, so `kubectl <Tab>` and the
+alias `k <Tab>` complete. Loading the saved script takes about 10 ms; generating it takes
+`kubectl` about 150 ms, too slow for every new terminal. After upgrading kubectl, run
+`dotfiles apply`, or delete the file: the next shell creates it again.
+
 ## Git
 
 dotfiles manages `~/.config/git/config`. `~/.gitconfig` is yours: git reads both, and settings in

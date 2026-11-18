@@ -420,3 +420,35 @@ func parseSemverLoose(v string) ([]int, bool) {
 	}
 	return out, len(out) >= 1 && len(out) <= 3
 }
+
+func TestWriteGenerated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "a", "kubectl.bash")
+	changed, err := writeGenerated(path, []byte("x\n"))
+	if err != nil || !changed {
+		t.Fatalf("first write: changed=%v err=%v", changed, err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0644 {
+		t.Errorf("mode: %v %v", fi.Mode(), err)
+	}
+	if changed, err := writeGenerated(path, []byte("x\n")); err != nil || changed {
+		t.Errorf("same content: changed=%v err=%v", changed, err)
+	}
+	if changed, err := writeGenerated(path, []byte("y\n")); err != nil || !changed || readFile(t, path) != "y\n" {
+		t.Errorf("new content: changed=%v err=%v", changed, err)
+	}
+}
+
+// The alias `k` is completed by __start_kubectl, so .bashrc must source the
+// kubectl completion script before registering it (#13).
+func TestBashrcLoadsKubectlCompletionBeforeK(t *testing.T) {
+	body, err := templatesFS.ReadFile("templates/bash/.bashrc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(body)
+	load := strings.Index(s, `source "$_kubectl_comp"`)
+	reg := strings.Index(s, "complete -o default -F __start_kubectl k")
+	if load < 0 || reg < 0 || reg < load {
+		t.Errorf("load=%d register=%d", load, reg)
+	}
+}
