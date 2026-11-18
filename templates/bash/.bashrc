@@ -59,20 +59,12 @@ if [[ $- == *i* ]]; then
 
     # kubectl completion, loaded eagerly: the `k` alias is completed by
     # __start_kubectl, and bash-completion's lazy loader never loads kubectl's
-    # script for `k`. Generating it costs ~80ms, so source the copy that
-    # `dotfiles apply` caches (created here once if kubectl came later).
-    if command -v kubectl >/dev/null; then
-        _kubectl_comp="$HOME/.cache/dotfiles/completions/kubectl.bash"
-        if [[ ! -s "$_kubectl_comp" ]]; then
-            mkdir -p "${_kubectl_comp%/*}"
-            kubectl completion bash >"$_kubectl_comp.tmp" 2>/dev/null &&
-                mv "$_kubectl_comp.tmp" "$_kubectl_comp" || rm -f "$_kubectl_comp.tmp"
-        fi
-        if [[ -s "$_kubectl_comp" ]]; then
-            source "$_kubectl_comp"
-            complete -o default -F __start_kubectl k
-        fi
-        unset _kubectl_comp
+    # script for `k`. Generating it is slow (~150ms), so source the copy that
+    # `dotfiles apply` caches. Missing (kubectl installed after the last
+    # apply)? `dotfiles doctor` says so; `dotfiles apply` creates it.
+    if [[ -s "$HOME/.cache/dotfiles/completions/kubectl.bash" ]] && command -v kubectl >/dev/null; then
+        source "$HOME/.cache/dotfiles/completions/kubectl.bash"
+        complete -o default -F __start_kubectl k
     fi
 
     # Interactive Tab Menu (Roughly the same as Zsh menu select)

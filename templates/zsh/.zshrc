@@ -53,19 +53,10 @@ if [[ -o interactive ]]; then
     autoload -Uz compinit && compinit -u
 
     # kubectl completion (also for the `k` alias), from the copy `dotfiles
-    # apply` caches; created here once if kubectl came later.
-    if command -v kubectl >/dev/null; then
-        _kubectl_comp="$HOME/.cache/dotfiles/completions/kubectl.zsh"
-        if [[ ! -s "$_kubectl_comp" ]]; then
-            mkdir -p "${_kubectl_comp:h}"
-            kubectl completion zsh >"$_kubectl_comp.tmp" 2>/dev/null &&
-                mv "$_kubectl_comp.tmp" "$_kubectl_comp" || rm -f "$_kubectl_comp.tmp"
-        fi
-        if [[ -s "$_kubectl_comp" ]]; then
-            source "$_kubectl_comp"
-            compdef k=kubectl
-        fi
-        unset _kubectl_comp
+    # apply` caches; generating it in every shell would be slow.
+    if [[ -s "$HOME/.cache/dotfiles/completions/kubectl.zsh" ]] && command -v kubectl >/dev/null; then
+        source "$HOME/.cache/dotfiles/completions/kubectl.zsh"
+        compdef k=kubectl
     fi
 
     # Keybindings

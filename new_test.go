@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func bashrcConfig(home string) Config {
@@ -446,9 +447,94 @@ func TestBashrcLoadsKubectlCompletionBeforeK(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(body)
-	load := strings.Index(s, `source "$_kubectl_comp"`)
+	load := strings.Index(s, `source "$HOME/.cache/dotfiles/completions/kubectl.bash"`)
 	reg := strings.Index(s, "complete -o default -F __start_kubectl k")
 	if load < 0 || reg < 0 || reg < load {
 		t.Errorf("load=%d register=%d", load, reg)
+	}
+}
+
+// The zsh completion must be loaded after compinit (compdef needs it).
+func TestZshrcLoadsKubectlCompletionAfterCompinit(t *testing.T) {
+	body, err := templatesFS.ReadFile("templates/zsh/.zshrc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(body)
+	ci := strings.Index(s, "compinit -u")
+	load := strings.Index(s, `source "$HOME/.cache/dotfiles/completions/kubectl.zsh"`)
+	if ci < 0 || load < 0 || load < ci {
+		t.Errorf("compinit=%d load=%d", ci, load)
+	}
+}
+
+// fakeKubectl puts a kubectl script with the given body first on PATH.
+func fakeKubectl(t *testing.T, body string) {
+	t.Helper()
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "kubectl"), "#!/bin/sh\n"+body+"\n")
+	if err := os.Chmod(filepath.Join(dir, "kubectl"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":/usr/bin:/bin")
+}
+
+func TestEnsureCompletions(t *testing.T) {
+	home := t.TempDir()
+	bashFile := filepath.Join(completionsDir(home), "kubectl.bash")
+	zshFile := filepath.Join(completionsDir(home), "kubectl.zsh")
+
+	fakeKubectl(t, `echo "# $2"; echo "__start_kubectl() { :; }"; echo "_kubectl() { :; }"`)
+	ensureCompletions(home, "bash", "diff")
+	if _, err := os.Stat(bashFile); err == nil {
+		t.Fatal("diff wrote a file")
+	}
+	ensureCompletions(home, "bash", "apply")
+	if !strings.Contains(readFile(t, bashFile), "# bash") {
+		t.Error("bash completion not cached")
+	}
+	if _, err := os.Stat(zshFile); err == nil {
+		t.Error("zsh completion cached for a bash user")
+	}
+	ensureCompletions(home, "zsh", "apply")
+	if !strings.Contains(readFile(t, zshFile), "# zsh") {
+		t.Error("zsh completion not cached")
+	}
+
+	// A failing kubectl keeps the old file.
+	fakeKubectl(t, `echo "mise ERROR not installed" >&2; exit 1`)
+	ensureCompletions(home, "bash", "apply")
+	if !strings.Contains(readFile(t, bashFile), "# bash") {
+		t.Error("failing kubectl changed the cached file")
+	}
+
+	// Output that is no completion script is not cached.
+	fakeKubectl(t, `echo "Please upgrade kubectl"`)
+	ensureCompletions(home, "bash", "apply")
+	if strings.Contains(readFile(t, bashFile), "upgrade") {
+		t.Error("garbage cached")
+	}
+}
+
+func TestKubectlCompletionTimeout(t *testing.T) {
+	old := completionTimeout
+	completionTimeout = 200 * time.Millisecond
+	defer func() { completionTimeout = old }()
+	fakeKubectl(t, `exec sleep 30`)
+	start := time.Now()
+	_, err := kubectlCompletion("bash")
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("want timeout, got %v", err)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Error("did not stop at the timeout")
+	}
+}
+
+func TestKubectlCompletionErrorShowsStderr(t *testing.T) {
+	fakeKubectl(t, `echo "mise ERROR kubectl@1.2.3 not installed" >&2; exit 1`)
+	_, err := kubectlCompletion("bash")
+	if err == nil || !strings.Contains(err.Error(), "not installed") {
+		t.Errorf("want stderr in the error, got %v", err)
 	}
 }
