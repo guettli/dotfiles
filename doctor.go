@@ -241,7 +241,12 @@ func checkCompletions(d *doctor, homeDir string, cfg UserConfig) {
 	for _, sh := range completionShells(cfg.Shell) {
 		path := filepath.Join(completionsDir(homeDir), "kubectl."+sh)
 		if fi, err := os.Stat(path); err != nil || fi.Size() == 0 {
-			d.warn("dotfiles apply", "kubectl completion for %s is missing, so `k <Tab>` does not complete", sh)
+			// apply can only help if kubectl itself works.
+			if _, err := kubectlCompletion(sh); err != nil {
+				d.warn("", "kubectl does not work, so `k <Tab>` does not complete: %v", err)
+			} else {
+				d.warn("dotfiles apply", "kubectl completion for %s is missing, so `k <Tab>` does not complete", sh)
+			}
 			return
 		}
 	}

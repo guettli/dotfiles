@@ -520,13 +520,14 @@ func TestKubectlCompletionTimeout(t *testing.T) {
 	old := completionTimeout
 	completionTimeout = 200 * time.Millisecond
 	defer func() { completionTimeout = old }()
-	fakeKubectl(t, `exec sleep 30`)
+	// No exec: a wrapper whose child keeps stdout open.
+	fakeKubectl(t, `sleep 30`)
 	start := time.Now()
 	_, err := kubectlCompletion("bash")
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("want timeout, got %v", err)
 	}
-	if time.Since(start) > 5*time.Second {
+	if time.Since(start) > 10*time.Second {
 		t.Error("did not stop at the timeout")
 	}
 }

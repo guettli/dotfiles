@@ -42,7 +42,12 @@ func kubectlCompletion(sh string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), completionTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "kubectl", "completion", sh)
-	cmd.Env = append(os.Environ(), "MISE_EXEC_AUTO_INSTALL=0")
+	// MISE_AUTO_INSTALL=0 stops a mise shim from installing a missing pinned
+	// version (MISE_EXEC_AUTO_INSTALL alone does not).
+	cmd.Env = append(os.Environ(), "MISE_AUTO_INSTALL=0", "MISE_EXEC_AUTO_INSTALL=0", "MISE_NOT_FOUND_AUTO_INSTALL=0")
+	// The timeout kills only kubectl itself; if it is a wrapper script, its
+	// children keep stdout open. Stop waiting for them, too.
+	cmd.WaitDelay = 2 * time.Second
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
