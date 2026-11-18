@@ -143,6 +143,20 @@ a pre-commit config) and `prepare-commit-msg` hooks run the repository's own hoo
 one. `git lfs install` puts its hooks into `~/.config/git/hooks` next to the managed ones;
 dotfiles leaves them alone.
 
+You don't need `prek install` or `pre-commit install`: the global hook already runs prek in
+every repository with a `.pre-commit-config.yaml` (or `prek.toml`). Both commands refuse to run
+while `core.hooksPath` is set globally, and they are right to: they
+would overwrite the shared hooks of all your repositories. If a repository needs its own hooks
+anyway, set the hooks path for that repository only; a repository setting wins over the global
+one:
+
+```bash
+git config --local core.hooksPath .git/hooks   # then: prek install
+```
+
+Tests that create git repositories inherit the global setting. Run them with
+`GIT_CONFIG_GLOBAL=/dev/null` if they must not.
+
 Older versions managed `~/.gitconfig` itself. `apply` migrates once: the managed part is
 removed, and lines appended later (like the `gh` credential helper) are kept. If the managed
 part was edited, `apply` stops and asks you to move your settings to the end of the file, or
