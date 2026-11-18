@@ -46,7 +46,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - run: go build -o /tmp/dotfiles .
+      - run: go build -buildvcs=false -o /tmp/dotfiles .
       - run: DOTFILES_BINARY=/tmp/dotfiles sh test/e2e.sh
 
   goreleaser:
