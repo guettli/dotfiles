@@ -38,7 +38,7 @@
       // Same for 0.x tools (fzf, bat, eza, zoxide, lazygit, prek), where a
       // minor release is the breaking one.
       matchManagers: ["mise"],
-      matchCurrentVersion: "<1.0.0",
+      matchCurrentValue: "/^0\\./",
       matchUpdateTypes: ["minor"],
       groupName: null,
     },
