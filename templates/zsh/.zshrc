@@ -52,6 +52,13 @@ if [[ -o interactive ]]; then
 
     autoload -Uz compinit && compinit -u
 
+    # kubectl completion (also for the `k` alias), from the copy `dotfiles
+    # apply` caches; generating it in every shell would be slow.
+    if [[ -s "$HOME/.cache/dotfiles/completions/kubectl.zsh" ]] && command -v kubectl >/dev/null; then
+        source "$HOME/.cache/dotfiles/completions/kubectl.zsh"
+        compdef k=kubectl
+    fi
+
     # Keybindings
     bindkey '^ ' autosuggest-accept
     bindkey -e

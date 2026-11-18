@@ -63,6 +63,7 @@ func runDoctor(args []string) int {
 	checkShell(d, cfg)
 	checkMise(d)
 	checkManagedFiles(d, homeDir, cfg)
+	checkCompletions(d, homeDir, cfg)
 	checkGit(d, homeDir, cfg)
 	checkClipboard(d)
 
@@ -229,4 +230,25 @@ func checkClipboard(d *doctor) {
 			d.warn(installHint("xclip"), "toClipboard/fromClipboard need xclip")
 		}
 	}
+}
+
+// checkCompletions finds kubectl completion files apply has not created yet
+// (kubectl installed after the last apply); the shells only source them.
+func checkCompletions(d *doctor, homeDir string, cfg UserConfig) {
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		return
+	}
+	for _, sh := range completionShells(cfg.Shell) {
+		path := filepath.Join(completionsDir(homeDir), "kubectl."+sh)
+		if fi, err := os.Stat(path); err != nil || fi.Size() == 0 {
+			// apply can only help if kubectl itself works.
+			if _, err := kubectlCompletion(sh); err != nil {
+				d.warn("", "kubectl does not work, so `k <Tab>` does not complete: %v", err)
+			} else {
+				d.warn("dotfiles apply", "kubectl completion for %s is missing, so `k <Tab>` does not complete", sh)
+			}
+			return
+		}
+	}
+	d.ok("kubectl completion is set up")
 }

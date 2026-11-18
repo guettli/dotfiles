@@ -172,6 +172,8 @@ func runApplyOrDiff(command string, args []string) int {
 		}
 	}
 
+	ensureCompletions(homeDir, userConfig.Shell, command)
+
 	// Tools are declared in ~/.config/mise/conf.d/dotfiles.toml (deployed above).
 	// mise decides what is missing and installs it — no tool bookkeeping here.
 	// A failed install is an error of apply (the fleet's timer alerts on it):
