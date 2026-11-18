@@ -323,3 +323,60 @@ func TestUninstallRestoresLegacyBak(t *testing.T) {
 		t.Error("legacy .bak not restored")
 	}
 }
+
+// If apply failed after moving the appended lines but before rewriting the
+// managed file, the next apply must succeed and not duplicate them.
+func TestAppendedLinesInterruptedApply(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := cacheDirFor(home)
+	c := bashrcConfig(home)
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	managed := readFile(t, c.Destination)
+	mustWrite(t, c.Destination, managed+"export A=1\n")
+	// Simulate the interruption: lines already in the local file.
+	if err := appendToLocalFile(c.LocalFile, c.Destination, []byte("export A=1\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(readFile(t, c.LocalFile), "export A=1"); n != 1 {
+		t.Errorf("appended line is %d times in the local file", n)
+	}
+	if readFile(t, c.Destination) != managed {
+		t.Error("managed file not restored")
+	}
+}
+
+// A failing move to the local file leaves the destination untouched, so a
+// later apply (after the problem is fixed) succeeds.
+func TestAppendedLinesLocalFileError(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := cacheDirFor(home)
+	c := bashrcConfig(home)
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	managed := readFile(t, c.Destination)
+	mustWrite(t, c.Destination, managed+"export A=1\n")
+	if err := os.Mkdir(c.LocalFile, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err == nil {
+		t.Fatal("want error, local file is a directory")
+	}
+	if readFile(t, c.Destination) != managed+"export A=1\n" {
+		t.Error("destination changed although the move failed")
+	}
+	if err := os.Remove(c.LocalFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatalf("apply after fixing the problem: %v", err)
+	}
+	if !strings.Contains(readFile(t, c.LocalFile), "export A=1") {
+		t.Error("line not moved")
+	}
+}

@@ -387,8 +387,7 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	}
 
 	newFile := config.Destination + ".new"
-	// Lines appended to the destination, moved to config.LocalFile once the
-	// destination was rewritten (so a failed write can't duplicate them).
+	// Lines appended to the destination, to be moved to config.LocalFile.
 	var appendedTail []byte
 
 	// 2. Check for local modifications if destination exists
@@ -446,19 +445,20 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 		return nil
 	}
 
-	if err := writeFileAtomic(config.Destination, renderedContent, mode); err != nil {
-		return fmt.Errorf("failed to write destination file: %w", err)
-	}
-	os.Remove(newFile)
-
+	// Move appended lines to the local file BEFORE rewriting the destination:
+	// if anything fails in between, the lines are still in the destination,
+	// and appendToLocalFile skips a block that is already there.
 	if len(appendedTail) > 0 {
 		if err := appendToLocalFile(config.LocalFile, config.Destination, appendedTail); err != nil {
-			// The lines are not lost: put the file back as it was.
-			_ = writeFileAtomic(config.Destination, append(append([]byte{}, renderedContent...), appendedTail...), mode)
 			return fmt.Errorf("move appended lines to %s: %w", config.LocalFile, err)
 		}
 		fmt.Printf("   Moved the lines appended to %s into %s\n", tildePath(config.Destination), tildePath(config.LocalFile))
 	}
+
+	if err := writeFileAtomic(config.Destination, renderedContent, mode); err != nil {
+		return fmt.Errorf("failed to write destination file: %w", err)
+	}
+	os.Remove(newFile)
 
 	// 4. Update cache baseline
 	err = os.WriteFile(cacheFile, renderedContent, 0644)
@@ -508,6 +508,11 @@ func handleLocalModification(config Config, cacheDir string, cacheBytes, destByt
 func appendToLocalFile(localFile, dest string, tail []byte) error {
 	if err := os.MkdirAll(filepath.Dir(localFile), 0755); err != nil {
 		return err
+	}
+	// Already moved by an earlier, interrupted apply: don't add it twice.
+	if existing, err := os.ReadFile(localFile); err == nil &&
+		bytes.HasSuffix(bytes.TrimRight(existing, "\n"), bytes.TrimRight(bytes.TrimLeft(tail, "\n"), "\n")) {
+		return nil
 	}
 	f, err := os.OpenFile(localFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
