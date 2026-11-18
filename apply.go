@@ -202,18 +202,6 @@ func cacheDirFor(homeDir string) string {
 	return filepath.Join(homeDir, ".local", "state", "dotfiles", "installed_cache")
 }
 
-// chainHooks are the git hooks which only run the repository's own hook
-// (templates/git/hooks/chain). core.hooksPath makes git skip .git/hooks, so
-// without them hooks installed by git-lfs or similar tools would silently not
-// run. Hooks which git calls very often (reference-transaction) or whose mere
-// existence changes git's behaviour (push-to-checkout) are left out.
-var chainHooks = []string{
-	"applypatch-msg", "pre-applypatch", "post-applypatch",
-	"commit-msg", "post-commit", "pre-merge-commit", "pre-rebase",
-	"post-checkout", "post-merge", "pre-push", "post-rewrite",
-	"pre-auto-gc", "sendemail-validate",
-}
-
 // profileFile returns the embedded path of a profile's file, or "" if the
 // profile has no such file.
 func profileFile(profile, name string) string {
@@ -324,14 +312,6 @@ func managedConfigs(homeDir string, userConfig UserConfig) []Config {
 			Destination: filepath.Join(homeDir, ".config", "git", "hooks", "pre-commit"),
 			Mode:        0755,
 		},
-	}
-	for _, hook := range chainHooks {
-		configs = append(configs, Config{
-			Source:      "templates/git/hooks/chain",
-			CacheKey:    "templates/git/hooks/" + hook,
-			Destination: filepath.Join(homeDir, ".config", "git", "hooks", hook),
-			Mode:        0755,
-		})
 	}
 	if userConfig.Shell == "zsh" {
 		configs = append(configs,

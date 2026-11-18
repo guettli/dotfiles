@@ -21,13 +21,13 @@ bash -ic 'command -v starship atuin zoxide fzf bat eza micro rg fd lazygit tldr 
 
 # A second apply changes nothing.
 dotfiles apply </dev/null | tee "$HOME/apply2.log"
-! grep -q '✅ Applied' "$HOME/apply2.log"
+if grep -q '✅ Applied' "$HOME/apply2.log"; then exit 1; fi
 
 # An installer appends to ~/.bashrc: apply moves it to ~/.bashrc.local.
 echo 'export FROM_INSTALLER=1' >>"$HOME/.bashrc"
 dotfiles apply </dev/null
 grep -q FROM_INSTALLER "$HOME/.bashrc.local"
-! grep -q FROM_INSTALLER "$HOME/.bashrc"
+if grep -q FROM_INSTALLER "$HOME/.bashrc"; then exit 1; fi
 test "$(bash -ic 'echo $FROM_INSTALLER' </dev/null 2>/dev/null | tail -n1)" = 1
 
 # git uses the configured identity.

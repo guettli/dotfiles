@@ -90,11 +90,24 @@ func uninstallFile(c Config, cacheDir string) error {
 	}
 
 	bak := backupPath(cacheDir, dest)
-	if _, err := os.Lstat(bak); err == nil {
-		if err := os.Rename(bak, dest); err != nil {
-			return err
+	legacy := false
+	if _, err := os.Lstat(bak); os.IsNotExist(err) && cacheErr == nil {
+		legacy = true
+		// Versions before the backup directory saved the original next to
+		// the file.
+		bak = dest + ".bak"
+	}
+	if _, err := os.Lstat(dest); os.IsNotExist(err) {
+		if _, err := os.Lstat(bak); err == nil {
+			if err := os.Rename(bak, dest); err != nil {
+				return err
+			}
+			if legacy {
+				fmt.Printf("↩️  restored %s from %s (saved by an older dotfiles version)\n", tildePath(dest), tildePath(bak))
+			} else {
+				fmt.Printf("↩️  restored %s\n", tildePath(dest))
+			}
 		}
-		fmt.Printf("↩️  restored %s\n", tildePath(dest))
 	}
 	if err := os.Remove(cacheFile); err != nil && !os.IsNotExist(err) {
 		return err

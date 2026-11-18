@@ -134,8 +134,10 @@ emails. `dotfiles doctor` warns about it.
 **Hooks.** `core.hooksPath` points to `~/.config/git/hooks`. On commit, the pre-commit hook runs
 [prek](https://github.com/j178/prek) if the repository has a `.pre-commit-config.yaml`, and
 every commit message shows `# Committing as: <email>`. git skips a repository's own
-`.git/hooks` when `core.hooksPath` is set, so each managed hook runs the repository's own hook
-when there is one. Hooks from git-lfs or `pre-commit install` keep working that way.
+`.git/hooks` when `core.hooksPath` is set, so the managed `pre-commit` (in repositories without
+a pre-commit config) and `prepare-commit-msg` hooks run the repository's own hook when there is
+one. `git lfs install` puts its hooks into `~/.config/git/hooks` next to the managed ones;
+dotfiles leaves them alone.
 
 Older versions managed `~/.gitconfig` itself. `apply` migrates once: the managed part is
 removed, and lines appended later (like the `gh` credential helper) are kept. If the managed

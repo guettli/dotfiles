@@ -261,16 +261,17 @@ func TestVerifyChecksum(t *testing.T) {
 	}
 }
 
-// The chain hook runs the repository's own hook from .git/hooks, which git
-// skips because core.hooksPath is set.
-func TestChainHookRunsRepoHook(t *testing.T) {
+// Without a pre-commit config, the managed pre-commit hook runs the
+// repository's own hook from .git/hooks, which git skips because
+// core.hooksPath is set.
+func TestPreCommitRunsRepoHook(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
 	dir := t.TempDir()
 	hooksDir := filepath.Join(dir, "hooks")
-	hook := filepath.Join(hooksDir, "post-checkout")
-	body, err := templatesFS.ReadFile("templates/git/hooks/chain")
+	hook := filepath.Join(hooksDir, "pre-commit")
+	body, err := templatesFS.ReadFile("templates/git/hooks/pre-commit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,13 +296,87 @@ func TestChainHookRunsRepoHook(t *testing.T) {
 	run("init", "-q")
 	run("config", "core.hooksPath", hooksDir)
 	marker := filepath.Join(dir, "ran")
-	mustWrite(t, filepath.Join(repo, ".git", "hooks", "post-checkout"), "#!/bin/sh\ntouch "+marker+"\n")
-	if err := os.Chmod(filepath.Join(repo, ".git", "hooks", "post-checkout"), 0755); err != nil {
+	mustWrite(t, filepath.Join(repo, ".git", "hooks", "pre-commit"), "#!/bin/sh\ntouch "+marker+"\n")
+	if err := os.Chmod(filepath.Join(repo, ".git", "hooks", "pre-commit"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	run("-c", "user.name=t", "-c", "user.email=t@x", "commit", "-q", "--allow-empty", "-m", "x")
-	run("checkout", "-q", "-b", "other")
 	if _, err := os.Stat(marker); err != nil {
-		t.Error("the repository's post-checkout hook did not run")
+		t.Error("the repository's pre-commit hook did not run")
+	}
+}
+
+// Versions before the backup directory saved the original as <file>.bak;
+// uninstall must restore that, not leave the user without ~/.bashrc.
+func TestUninstallRestoresLegacyBak(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := cacheDirFor(home)
+	c := bashrcConfig(home)
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, c.Destination+".bak", "# old\n")
+	if err := uninstallFile(c, cacheDir); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, c.Destination) != "# old\n" {
+		t.Error("legacy .bak not restored")
+	}
+}
+
+// If apply failed after moving the appended lines but before rewriting the
+// managed file, the next apply must succeed and not duplicate them.
+func TestAppendedLinesInterruptedApply(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := cacheDirFor(home)
+	c := bashrcConfig(home)
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	managed := readFile(t, c.Destination)
+	mustWrite(t, c.Destination, managed+"export A=1\n")
+	// Simulate the interruption: lines already in the local file.
+	if err := appendToLocalFile(c.LocalFile, c.Destination, []byte("export A=1\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(readFile(t, c.LocalFile), "export A=1"); n != 1 {
+		t.Errorf("appended line is %d times in the local file", n)
+	}
+	if readFile(t, c.Destination) != managed {
+		t.Error("managed file not restored")
+	}
+}
+
+// A failing move to the local file leaves the destination untouched, so a
+// later apply (after the problem is fixed) succeeds.
+func TestAppendedLinesLocalFileError(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := cacheDirFor(home)
+	c := bashrcConfig(home)
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatal(err)
+	}
+	managed := readFile(t, c.Destination)
+	mustWrite(t, c.Destination, managed+"export A=1\n")
+	if err := os.Mkdir(c.LocalFile, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err == nil {
+		t.Fatal("want error, local file is a directory")
+	}
+	if readFile(t, c.Destination) != managed+"export A=1\n" {
+		t.Error("destination changed although the move failed")
+	}
+	if err := os.Remove(c.LocalFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := processConfig(c, TemplateData{}, cacheDir, "apply", false); err != nil {
+		t.Fatalf("apply after fixing the problem: %v", err)
+	}
+	if !strings.Contains(readFile(t, c.LocalFile), "export A=1") {
+		t.Error("line not moved")
 	}
 }

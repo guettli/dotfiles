@@ -42,18 +42,11 @@ jobs:
             dnf install -y curl git tar gzip findutils
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Trust the checkout
-        # The container runs as root, but the workspace belongs to the runner
-        # user, so git refuses to use it ("dubious ownership"). checkout only
-        # allows it in a temporary HOME, so every later git call fails: the VCS
-        # stamping of "go build", and the git checks in the e2e script.
-        # --system, because the e2e script lets dotfiles manage the user config.
-        run: git config --system --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
-      - run: go build -o /tmp/dotfiles .
+      - run: go build -buildvcs=false -o /tmp/dotfiles .
       - run: DOTFILES_BINARY=/tmp/dotfiles sh test/e2e.sh
 
   goreleaser:

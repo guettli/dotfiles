@@ -387,6 +387,8 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 	}
 
 	newFile := config.Destination + ".new"
+	// Lines appended to the destination, to be moved to config.LocalFile.
+	var appendedTail []byte
 
 	// 2. Check for local modifications if destination exists
 	if fileInfo, err := os.Lstat(config.Destination); err == nil {
@@ -402,7 +404,7 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 			// normal template update (or the cache is stale) and is safe to overwrite.
 			if cacheBytes, err := os.ReadFile(cacheFile); err == nil {
 				if !bytes.Equal(cacheBytes, destBytes) {
-					if err := handleLocalModification(config, cacheDir, cacheBytes, destBytes, renderedContent, newFile, force); err != nil {
+					if appendedTail, err = handleLocalModification(config, cacheDir, cacheBytes, destBytes, renderedContent, newFile, force); err != nil {
 						return err
 					}
 				}
@@ -443,6 +445,16 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 		return nil
 	}
 
+	// Move appended lines to the local file BEFORE rewriting the destination:
+	// if anything fails in between, the lines are still in the destination,
+	// and appendToLocalFile skips a block that is already there.
+	if len(appendedTail) > 0 {
+		if err := appendToLocalFile(config.LocalFile, config.Destination, appendedTail); err != nil {
+			return fmt.Errorf("move appended lines to %s: %w", config.LocalFile, err)
+		}
+		fmt.Printf("   Moved the lines appended to %s into %s\n", tildePath(config.Destination), tildePath(config.LocalFile))
+	}
+
 	if err := writeFileAtomic(config.Destination, renderedContent, mode); err != nil {
 		return fmt.Errorf("failed to write destination file: %w", err)
 	}
@@ -462,21 +474,18 @@ func processConfig(config Config, data any, cacheDir string, command string, for
 // dotfiles wrote last time (cacheBytes). Lines appended at the end (what
 // installers do) are moved to config.LocalFile. Other edits are an error,
 // unless force: then the edited file is backed up and replaced.
-func handleLocalModification(config Config, cacheDir string, cacheBytes, destBytes, renderedContent []byte, newFile string, force bool) error {
+func handleLocalModification(config Config, cacheDir string, cacheBytes, destBytes, renderedContent []byte, newFile string, force bool) (appended []byte, err error) {
 	if config.LocalFile != "" && bytes.HasPrefix(destBytes, cacheBytes) {
 		tail := destBytes[len(cacheBytes):]
 		if len(bytes.TrimSpace(tail)) > 0 {
-			if err := appendToLocalFile(config.LocalFile, config.Destination, tail); err != nil {
-				return err
-			}
-			fmt.Printf("   Moved the lines appended to %s into %s\n", tildePath(config.Destination), tildePath(config.LocalFile))
+			return tail, nil
 		}
-		return nil
+		return nil, nil
 	}
 
 	fmt.Printf("\n⚠️ LOCAL MODIFICATION DETECTED: %s\n", config.Destination)
 	if err := os.WriteFile(newFile, renderedContent, 0644); err != nil {
-		return fmt.Errorf("failed to write %s for diffing: %w", newFile, err)
+		return nil, fmt.Errorf("failed to write %s for diffing: %w", newFile, err)
 	}
 	fmt.Printf("   To see diff execute:\n   diff %s %s\n", config.Destination, newFile)
 	if !force {
@@ -484,14 +493,14 @@ func handleLocalModification(config Config, cacheDir string, cacheBytes, destByt
 		if config.LocalFile != "" {
 			where = config.LocalFile + " (dotfiles never touches that file)"
 		}
-		return fmt.Errorf("local modifications detected in %s. Move your changes to %s, or use --force to back up your version and overwrite it", config.Destination, where)
+		return nil, fmt.Errorf("local modifications detected in %s. Move your changes to %s, or use --force to back up your version and overwrite it", config.Destination, where)
 	}
 	bak, err := backupFile(cacheDir, config.Destination)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	fmt.Printf("   Continuing anyway because --force was used. Your version was saved to %s\n", bak)
-	return nil
+	return nil, nil
 }
 
 // appendToLocalFile appends lines which were added to dest to the user's own
@@ -499,6 +508,11 @@ func handleLocalModification(config Config, cacheDir string, cacheBytes, destByt
 func appendToLocalFile(localFile, dest string, tail []byte) error {
 	if err := os.MkdirAll(filepath.Dir(localFile), 0755); err != nil {
 		return err
+	}
+	// Already moved by an earlier, interrupted apply: don't add it twice.
+	if existing, err := os.ReadFile(localFile); err == nil &&
+		bytes.HasSuffix(bytes.TrimRight(existing, "\n"), bytes.TrimRight(bytes.TrimLeft(tail, "\n"), "\n")) {
+		return nil
 	}
 	f, err := os.OpenFile(localFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
