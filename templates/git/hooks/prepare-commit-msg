@@ -1,6 +1,12 @@
 #!/bin/sh
+# Show which email the commit uses. In the editor as a comment line; git
+# strips "#" lines only when it opens an editor ($2 empty or "template"), so
+# for -m/-F, merge, squash and amend print it to the terminal instead.
 email=$(git config user.email)
-echo "# Committing as: $email" >> "$1"
+case "${2:-}" in
+"" | template) echo "# Committing as: $email" >> "$1" ;;
+*) echo "Committing as: $email" >&2 ;;
+esac
 
 # core.hooksPath (set globally by dotfiles) makes git ignore the hooks in
 # .git/hooks. Run the repository's own hook, so it keeps working.
