@@ -13,7 +13,7 @@ History and navigation
 
 Files and text
   ll              List files with details (also: la, ls)
-  eza --tree      Show a directory as a tree
+  eza --tree      Show a directory as a tree (Linux only)
   bat <file>      Show a file with syntax highlighting and line numbers
   rg <text>       Search for text in all files below this directory (ripgrep)
   fd <name>       Find files by name

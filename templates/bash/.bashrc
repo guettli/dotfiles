@@ -49,7 +49,11 @@ if [[ $- == *i* ]]; then
             shift
 
             case "$command" in
-                cd) fzf --preview 'eza --tree --color=always {} | head -200' "$@" ;;
+                cd) if command -v eza >/dev/null; then
+                        fzf --preview 'eza --tree --color=always {} | head -200' "$@"
+                    else
+                        fzf --preview 'ls -la {}' "$@"
+                    fi ;;
                 export | unset) fzf --preview "eval 'echo \$'{}" "$@" ;;
                 ssh) fzf --preview 'dig {}' "$@" ;;
                 *) fzf --preview 'bat -n --color=always {}' "$@" ;;
