@@ -97,7 +97,7 @@ email = "you@your-company.com"
   org use the matching git email.
 - **`profile`**: adds personal settings from
   [`templates/profiles/<name>/`](templates/profiles): `shell.sh` (sourced by the shell),
-  `gitconfig` and `direnv.toml`. Example: `profile = "guettli"`.
+  `gitconfig`, `direnv.toml` and `mise.toml`. Example: `profile = "guettli"`.
 
 ## What gets installed
 

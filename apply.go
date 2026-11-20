@@ -253,6 +253,7 @@ func managedConfigs(homeDir string, userConfig UserConfig) []Config {
 			// installs them. The user's own tools go in ~/.config/mise/config.toml
 			// via `mise use -g`, which dotfiles never touches.
 			Source:      "templates/mise/dotfiles.toml",
+			Extra:       nonEmpty(profileFile(p, "mise.toml")),
 			Destination: filepath.Join(homeDir, ".config", "mise", "conf.d", "dotfiles.toml"),
 		},
 		{
