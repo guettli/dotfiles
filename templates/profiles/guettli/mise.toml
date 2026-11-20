@@ -1,0 +1,6 @@
+# Profile "guettli": trust every mise.toml without `mise trust`, like the
+# direnv whitelist in this profile. Fresh clones can then run their prek hooks
+# (`mise exec betterleaks -- ...`) right away.
+# Dangerous: a cloned repository's mise.toml can run code (env, hooks, tasks).
+[settings]
+trusted_config_paths = ["/"]

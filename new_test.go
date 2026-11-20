@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 func bashrcConfig(home string) Config {
@@ -188,7 +190,7 @@ func TestBashIsDefaultWithoutZshFiles(t *testing.T) {
 	}
 }
 
-// The default (no profile) must not trust every .envrc.
+// The default (no profile) must not trust every .envrc or mise.toml.
 func TestDirenvDoesNotTrustEverythingByDefault(t *testing.T) {
 	home := t.TempDir()
 	for _, c := range managedConfigs(home, UserConfig{Shell: "bash"}) {
@@ -196,10 +198,38 @@ func TestDirenvDoesNotTrustEverythingByDefault(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(b), "whitelist") || strings.Contains(string(b), "git-tips") {
+		if strings.Contains(string(b), "whitelist") || strings.Contains(string(b), "git-tips") || strings.Contains(string(b), "trusted_config_paths") {
 			t.Errorf("%s contains personal settings without a profile", c.Destination)
 		}
 	}
+}
+
+// Profile "guettli" trusts every mise.toml, and the base tools must still parse.
+func TestGuettliProfileTrustsMiseConfigs(t *testing.T) {
+	home := t.TempDir()
+	for _, c := range managedConfigs(home, UserConfig{Shell: "bash", Profile: "guettli"}) {
+		if !strings.HasSuffix(c.Destination, filepath.Join("conf.d", "dotfiles.toml")) {
+			continue
+		}
+		b, err := renderConfig(c, c.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got struct {
+			Tools    map[string]string `toml:"tools"`
+			Settings struct {
+				TrustedConfigPaths []string `toml:"trusted_config_paths"`
+			} `toml:"settings"`
+		}
+		if _, err := toml.Decode(string(b), &got); err != nil {
+			t.Fatalf("rendered mise config is not valid TOML: %v\n%s", err, b)
+		}
+		if got.Tools["prek"] == "" || len(got.Settings.TrustedConfigPaths) != 1 || got.Settings.TrustedConfigPaths[0] != "/" {
+			t.Errorf("unexpected mise config: %+v", got)
+		}
+		return
+	}
+	t.Fatal("no conf.d/dotfiles.toml in managed configs")
 }
 
 func TestInitWritesLoadableConfig(t *testing.T) {
