@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -268,20 +270,49 @@ func (t miseTool) String() string { return t.Name + "@" + t.Version }
 
 // baseMiseTools returns the tools declared in the embedded
 // templates/mise/dotfiles.toml [tools] table — the single source of truth for
-// the base set, sorted by name for stable output.
+// the base set, sorted by name for stable output. Tools limited to other
+// operating systems (`os = [...]`) are left out, as mise does.
 func baseMiseTools() ([]miseTool, error) {
 	data, err := templatesFS.ReadFile("templates/mise/dotfiles.toml")
 	if err != nil {
 		return nil, err
 	}
+	return parseMiseTools(data, miseOS(runtime.GOOS))
+}
+
+// miseOS maps a GOOS to the name mise uses in a tool's `os` option.
+func miseOS(goos string) string {
+	if goos == "darwin" {
+		return "macos"
+	}
+	return goos
+}
+
+// parseMiseTools reads a mise [tools] table whose values are a version string
+// or a table like { version = "1.2.3", os = ["linux"] }, and keeps the tools
+// mise installs on osName.
+func parseMiseTools(data []byte, osName string) ([]miseTool, error) {
 	var doc struct {
-		Tools map[string]string `toml:"tools"`
+		Tools map[string]any `toml:"tools"`
 	}
 	if err := toml.Unmarshal(data, &doc); err != nil {
 		return nil, err
 	}
 	tools := make([]miseTool, 0, len(doc.Tools))
-	for name, version := range doc.Tools {
+	for name, value := range doc.Tools {
+		var version string
+		switch v := value.(type) {
+		case string:
+			version = v
+		case map[string]any:
+			version, _ = v["version"].(string)
+			if oses, ok := v["os"].([]any); ok && !slices.Contains(oses, any(osName)) {
+				continue
+			}
+		}
+		if version == "" {
+			return nil, fmt.Errorf("tool %s: no version", name)
+		}
 		tools = append(tools, miseTool{Name: name, Version: version})
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })

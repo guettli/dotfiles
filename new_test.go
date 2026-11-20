@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -537,5 +538,47 @@ func TestKubectlCompletionErrorShowsStderr(t *testing.T) {
 	_, err := kubectlCompletion("bash")
 	if err == nil || !strings.Contains(err.Error(), "not installed") {
 		t.Errorf("want stderr in the error, got %v", err)
+	}
+}
+
+func TestParseMiseToolsOS(t *testing.T) {
+	data := []byte(`[tools]
+bat = "0.26.1"
+eza = { version = "0.23.5", os = ["linux"] }
+`)
+	for _, tc := range []struct {
+		os   string
+		want string
+	}{
+		{"linux", "bat@0.26.1 eza@0.23.5"},
+		{miseOS("darwin"), "bat@0.26.1"},
+	} {
+		tools, err := parseMiseTools(data, tc.os)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, tool := range tools {
+			got = append(got, tool.String())
+		}
+		if strings.Join(got, " ") != tc.want {
+			t.Errorf("%s: got %v, want %s", tc.os, got, tc.want)
+		}
+	}
+}
+
+// The embedded template on macOS: everything except eza, which would need cargo.
+func TestBaseToolsMacOS(t *testing.T) {
+	data, err := templatesFS.ReadFile("templates/mise/dotfiles.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	linux, _ := parseMiseTools(data, "linux")
+	mac, err := parseMiseTools(data, "macos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mac) != len(linux)-1 || slices.ContainsFunc(mac, func(m miseTool) bool { return m.Name == "eza" }) {
+		t.Errorf("macOS tools: %v", mac)
 	}
 }

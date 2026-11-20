@@ -111,7 +111,7 @@ email = "you@your-company.com"
 | [zoxide](https://github.com/ajeetdsouza/zoxide) | `z <dir>`: jump to directories |
 | [micro](https://micro-editor.github.io/) | Simple terminal editor, the default `$EDITOR` |
 | [lazygit](https://github.com/jesseduffield/lazygit) | Git in the terminal |
-| [bat](https://github.com/sharkdp/bat), [eza](https://github.com/eza-community/eza) | `cat` and `ls` with colors |
+| [bat](https://github.com/sharkdp/bat), [eza](https://github.com/eza-community/eza) | `cat` and `ls` with colors (eza: Linux only, it has no macOS builds) |
 | [ripgrep](https://github.com/BurntSushi/ripgrep), [fd](https://github.com/sharkdp/fd) | Search text and files |
 | [tealdeer](https://github.com/tealdeer-rs/tealdeer) | `tldr <command>`: short examples |
 | [prek](https://github.com/j178/prek) | Runs `.pre-commit-config.yaml` hooks on commit |
