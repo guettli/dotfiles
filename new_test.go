@@ -612,3 +612,59 @@ func TestBaseToolsMacOS(t *testing.T) {
 		t.Errorf("macOS tools: %v", mac)
 	}
 }
+
+func TestMigrateLegacyMiseGlobals(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := filepath.Join(home, ".local", "state", "dotfiles", "installed_cache")
+	path := filepath.Join(home, ".config", "mise", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	orig := "[tools]\nagy = \"latest\"\natuin = \"latest\"\nclaude = \"latest\"\ndirenv = 'latest' # old\nstarship = \"1.20.0\"\ntmux = \"latest\"\n\n[env]\natuin = \"latest\"\n"
+	if err := os.WriteFile(path, []byte(orig), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := migrateLegacyMiseGlobals(home, cacheDir, "diff"); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, path) != orig {
+		t.Fatal("diff changed the file")
+	}
+
+	if err := migrateLegacyMiseGlobals(home, cacheDir, "apply"); err != nil {
+		t.Fatal(err)
+	}
+	want := "[tools]\nagy = \"latest\"\nclaude = \"latest\"\nstarship = \"1.20.0\"\n\n[env]\natuin = \"latest\"\n"
+	if got := readFile(t, path); got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0600 {
+		t.Errorf("mode %v", info.Mode().Perm())
+	}
+	if got := readFile(t, backupPath(cacheDir, path)); got != orig {
+		t.Errorf("backup: %q", got)
+	}
+
+	// Once only: a tool the user adds back stays.
+	if err := os.WriteFile(path, []byte("[tools]\natuin = \"latest\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacyMiseGlobals(home, cacheDir, "apply"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, path); got != "[tools]\natuin = \"latest\"\n" {
+		t.Errorf("second run changed the file: %q", got)
+	}
+}
+
+func TestMigrateLegacyMiseGlobalsNoFile(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := filepath.Join(home, "state", "installed_cache")
+	if err := migrateLegacyMiseGlobals(home, cacheDir, "apply"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacyMiseMarker(cacheDir)); err != nil {
+		t.Error("marker missing")
+	}
+}
