@@ -216,7 +216,7 @@ func TestGuettliProfileTrustsMiseConfigs(t *testing.T) {
 			t.Fatal(err)
 		}
 		var got struct {
-			Tools    map[string]string `toml:"tools"`
+			Tools    map[string]any `toml:"tools"`
 			Settings struct {
 				TrustedConfigPaths []string `toml:"trusted_config_paths"`
 			} `toml:"settings"`
@@ -224,7 +224,7 @@ func TestGuettliProfileTrustsMiseConfigs(t *testing.T) {
 		if _, err := toml.Decode(string(b), &got); err != nil {
 			t.Fatalf("rendered mise config is not valid TOML: %v\n%s", err, b)
 		}
-		if got.Tools["prek"] == "" || len(got.Settings.TrustedConfigPaths) != 1 || got.Settings.TrustedConfigPaths[0] != "/" {
+		if got.Tools["prek"] == nil || len(got.Settings.TrustedConfigPaths) != 1 || got.Settings.TrustedConfigPaths[0] != "/" {
 			t.Errorf("unexpected mise config: %+v", got)
 		}
 		return
