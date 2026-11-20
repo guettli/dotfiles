@@ -23,7 +23,7 @@ Files and text
 Git
   lazygit         Full screen git: stage, commit, push with single keys
   The prompt shows the branch and whether you have changes (m = modified).
-  Commits show "# Committing as: <email>", so you see which email is used.
+  Commits show "Committing as: <email>", so you see which email is used.
 
 Projects
   .envrc          direnv loads the variables of a project when you cd into it.
