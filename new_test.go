@@ -668,3 +668,54 @@ func TestMigrateLegacyMiseGlobalsNoFile(t *testing.T) {
 		t.Error("marker missing")
 	}
 }
+
+func TestMigrateLegacyMiseGlobalsSymlinkAndBroken(t *testing.T) {
+	home := t.TempDir()
+	cacheDir := filepath.Join(home, "state", "installed_cache")
+	path := filepath.Join(home, ".config", "mise", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(home, "repo.toml")
+	if err := os.WriteFile(target, []byte("[tools]\natuin = \"latest\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacyMiseGlobals(home, cacheDir, "apply"); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Lstat(path); info.Mode()&os.ModeSymlink == 0 {
+		t.Error("symlink replaced")
+	}
+	if readFile(t, target) != "[tools]\natuin = \"latest\"\n" {
+		t.Error("link target changed")
+	}
+	if _, err := os.Stat(legacyMiseMarker(cacheDir)); err == nil {
+		t.Error("marker written for a symlink")
+	}
+
+	// Unparseable: unchanged, no marker, so a later fix still gets cleaned.
+	os.Remove(path)
+	if err := os.WriteFile(path, []byte("[tools\natuin = \"latest\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacyMiseGlobals(home, cacheDir, "apply"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacyMiseMarker(cacheDir)); err == nil {
+		t.Error("marker written for broken TOML")
+	}
+}
+
+func TestRemoveLegacyMiseLinesMultilineString(t *testing.T) {
+	data := []byte("[env]\nX = \"\"\"\n[tools]\natuin = \"latest\"\n\"\"\"\n")
+	cleaned, removed := removeLegacyMiseLines(data)
+	if len(removed) == 0 {
+		t.Skip("text matcher did not trigger")
+	}
+	if onlyToolsRemoved(data, cleaned, removed) {
+		t.Error("guard accepted a change inside a string")
+	}
+}

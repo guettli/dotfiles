@@ -142,6 +142,7 @@ func runApplyOrDiff(command string, args []string) int {
 	hasErrors := false
 
 	gitConfigOK := true
+	miseConfOK := true
 	if err := checkXDGConfigHome(homeDir); err != nil {
 		fmt.Printf("❌ %v\n", err)
 		hasErrors = true
@@ -153,6 +154,9 @@ func runApplyOrDiff(command string, args []string) int {
 			continue
 		}
 		err := processConfig(config, config.Data, cacheDir, command, *force)
+		if err != nil && strings.HasSuffix(config.Destination, filepath.Join("mise", "conf.d", "dotfiles.toml")) {
+			miseConfOK = false
+		}
 		if err != nil {
 			fmt.Printf("❌ Error processing %s: %v\n", config.Destination, err)
 			hasErrors = true
@@ -174,8 +178,12 @@ func runApplyOrDiff(command string, args []string) int {
 
 	ensureCompletions(homeDir, userConfig.Shell, command)
 
-	if err := migrateLegacyMiseGlobals(homeDir, cacheDir, command); err != nil {
-		fmt.Printf("⚠️ Could not clean up ~/.config/mise/config.toml: %v\n", err)
+	// Only once conf.d/dotfiles.toml declares the tools, else they would be
+	// declared nowhere.
+	if miseConfOK {
+		if err := migrateLegacyMiseGlobals(homeDir, cacheDir, command); err != nil {
+			fmt.Printf("⚠️ Could not clean up ~/.config/mise/config.toml: %v\n", err)
+		}
 	}
 
 	// Tools are declared in ~/.config/mise/conf.d/dotfiles.toml (deployed above).
