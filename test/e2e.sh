@@ -16,7 +16,9 @@ DOTFILES_BINARY="$DOTFILES_BINARY" sh ./install.sh --name "CI User" --email ci@e
 export PATH="$HOME/.local/bin:$PATH"
 
 grep -q "shell = \"$sh\"" "$HOME/.config/dotfiles/config.toml"
-if [ "$sh" = bash ]; then test ! -e "$HOME/.zshrc"; else test ! -e "$HOME/.bashrc"; fi
+# bash is always configured; zsh only when chosen.
+test -e "$HOME/.bashrc"
+if [ "$sh" = bash ]; then test ! -e "$HOME/.zshrc"; fi
 grep -q 'alias old=yes' "$HOME/.local/state/dotfiles/backup$rc"
 
 # The new interactive shell has the tools (eza has no macOS builds).
