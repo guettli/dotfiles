@@ -194,6 +194,12 @@ func runMise(command string) error {
 	if _, err := exec.LookPath("mise"); err != nil {
 		return fmt.Errorf("mise not found on PATH — install it first: https://mise.jdx.dev/getting-started.html")
 	}
+	if tools, err := baseMiseTools(); err == nil {
+		if problem, fix := miseTooOld(tools); problem != "" {
+			return fmt.Errorf("%s.\n   To fix it, run:\n      %s",
+				problem, strings.ReplaceAll(fix, "\n", "\n      "))
+		}
+	}
 	if command == "diff" {
 		tools, err := baseMiseTools()
 		if err != nil {

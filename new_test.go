@@ -719,3 +719,56 @@ func TestRemoveLegacyMiseLinesMultilineString(t *testing.T) {
 		t.Error("guard accepted a change inside a string")
 	}
 }
+
+// fakeMise puts a mise on PATH which knows only the given registry names.
+func fakeMise(t *testing.T, version string, known ...string) string {
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in\n--version) echo '" + version + " linux-x64 (2026-01-01)' ;;\nregistry) cat <<'EOF'\n"
+	for _, k := range known {
+		script += k + "    aqua:x/" + k + "\n"
+	}
+	script += "EOF\n;;\ntool) [ \"$2\" = aliased ] ;;\n*) exit 1 ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(dir, "mise"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return dir
+}
+
+func TestMiseTooOld(t *testing.T) {
+	tools := []miseTool{{"bat", "1"}, {"micro", "2"}, {"aqua:foo/bar", "3"}, {"aliased", "4"}}
+
+	fakeMise(t, "2026.11.6", "bat", "micro")
+	if p, _ := miseTooOld(tools); p != "" {
+		t.Errorf("current mise reported as too old: %s", p)
+	}
+
+	dir := fakeMise(t, "2026.5.12", "bat")
+	p, fix := miseTooOld(tools)
+	if !strings.Contains(p, "mise 2026.5.12") || !strings.Contains(p, "does not know micro") || strings.Contains(p, "aqua:") {
+		t.Errorf("problem: %q", p)
+	}
+	if !strings.Contains(p, filepath.Join(dir, "mise")) || !strings.Contains(p, "Several mise") {
+		t.Errorf("should name both mise on PATH: %q", p)
+	}
+	if !strings.HasSuffix(fix, "dotfiles apply") {
+		t.Errorf("fix: %q", fix)
+	}
+}
+
+func TestMiseUpdateHint(t *testing.T) {
+	for _, tc := range []struct{ path, real, want string }{
+		{"/home/me/.nix-profile/bin/mise", "/nix/store/abc-mise/bin/mise", "nix profile upgrade mise"},
+		{"/run/current-system/sw/bin/mise", "/nix/store/abc-mise/bin/mise", "update mise in your NixOS"},
+		{"/etc/profiles/per-user/me/bin/mise", "/nix/store/abc-mise/bin/mise", "update mise in your NixOS"},
+		{"/home/me/.local/state/nix/profile/bin/mise", "/nix/store/abc-mise/bin/mise", "nix profile upgrade mise"},
+		{"/usr/local/bin/mise", "/usr/local/bin/mise", "mise self-update"},
+		{"/snap/bin/mise", "/usr/bin/snap", "sudo snap refresh mise"},
+		{"/opt/homebrew/bin/mise", "/opt/homebrew/Cellar/mise/1/bin/mise", "brew upgrade mise"},
+		{"/home/me/.local/bin/mise", "/home/me/.local/bin/mise", "mise self-update"},
+	} {
+		if got := miseUpdateHint(tc.path, tc.real); !strings.HasPrefix(got, tc.want) {
+			t.Errorf("%s: %q", tc.path, got)
+		}
+	}
+}

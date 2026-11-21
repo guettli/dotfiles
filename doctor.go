@@ -146,6 +146,10 @@ func checkMise(d *doctor) {
 		d.warn("", "could not read the tool list: %v", err)
 		return
 	}
+	if problem, fix := miseTooOld(tools); problem != "" {
+		d.warn(fix, "%s", problem)
+		return
+	}
 	var missing []string
 	for _, tool := range tools {
 		if !miseToolInstalled(tool) {
