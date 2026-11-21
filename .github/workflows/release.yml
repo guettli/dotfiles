@@ -6,7 +6,7 @@ name: Release
 # next patch version; a v* tag pushed by hand is released as it is.
 #
 # After CI, not next to it: the fleet runs @latest, so a tag must never point
-# at a commit whose CI (e2e on Ubuntu and Fedora) failed.
+# at a commit whose CI (e2e on Ubuntu, Fedora and macOS) failed.
 #
 # Tag and release happen in this one job: a tag pushed with GITHUB_TOKEN does
 # not trigger other workflows.

@@ -1,7 +1,9 @@
 #!/bin/sh
 # End to end test on a fresh machine (CI runs it in Ubuntu and Fedora
 # containers and on macOS). Needs DOTFILES_BINARY: a built dotfiles binary.
-# E2E_SHELL: bash (default) or zsh.
+# E2E_SHELL: bash or zsh, passed to init; unset: init detects the shell from
+# the login shell, which must then be bash (root in a container, the macOS
+# runner).
 set -eux
 
 : "${DOTFILES_BINARY:?set DOTFILES_BINARY to a built dotfiles binary}"
@@ -12,7 +14,9 @@ cd "$(dirname "$0")/.."
 printf '# my old rc file\nalias old=yes\n' >"$rc"
 
 # Fresh install, non-interactive.
-DOTFILES_BINARY="$DOTFILES_BINARY" sh ./install.sh --name "CI User" --email ci@example.com --shell "$sh" </dev/null
+set -- --name "CI User" --email ci@example.com
+if [ -n "${E2E_SHELL:-}" ]; then set -- "$@" --shell "$E2E_SHELL"; fi
+DOTFILES_BINARY="$DOTFILES_BINARY" sh ./install.sh "$@" </dev/null
 export PATH="$HOME/.local/bin:$PATH"
 
 grep -q "shell = \"$sh\"" "$HOME/.config/dotfiles/config.toml"
