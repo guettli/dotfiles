@@ -112,7 +112,7 @@ func runApplyOrDiff(command string, args []string) int {
 			return 1
 		}
 		if tmp != "" {
-			defer os.Remove(tmp)
+			defer os.RemoveAll(filepath.Dir(tmp))
 			*configPath = tmp
 		}
 	}
@@ -120,7 +120,9 @@ func runApplyOrDiff(command string, args []string) int {
 	// First run without a config: ask for it instead of failing.
 	defaultPath, _ := configPaths(homeDir)
 	if command == "apply" && *configPath == "" && isTerminal(os.Stdin) {
-		if _, err := os.Stat(defaultPath); os.IsNotExist(err) {
+		// Not over an old config.yaml that could not be converted:
+		// loadUserConfig explains that one.
+		if _, err := os.Stat(defaultPath); os.IsNotExist(err) && !legacyConfigExists(homeDir) {
 			fmt.Printf("No config yet (%s). Let's create it.\n\n", defaultPath)
 			if code := runInit(nil, os.Stdin, os.Stdout); code != 0 {
 				return code
@@ -231,6 +233,17 @@ func runApplyOrDiff(command string, args []string) int {
 		fmt.Printf("\n⬆️  dotfiles %s is available (you have %s). Run: dotfiles update\n", latest, getVersion())
 	}
 	return 0
+}
+
+// legacyConfigExists reports whether an old config.yaml/.yml is present.
+func legacyConfigExists(homeDir string) bool {
+	_, legacy := configPaths(homeDir)
+	for _, p := range legacy {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func cacheDirFor(homeDir string) string {
