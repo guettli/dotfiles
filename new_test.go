@@ -772,3 +772,66 @@ func TestMiseUpdateHint(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrateLegacyConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "dotfiles")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	yamlPath := filepath.Join(dir, "config.yaml")
+	orig := "# yaml-language-server: $schema=x\nname: Thomas Güttler\npersonal_email: me@example.com\norgs:\n  - url: github.com/acme\n    email: me@acme.com\nmise_tools:\n  - claude\n"
+	if err := os.WriteFile(yamlPath, []byte(orig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// diff: nothing written, a usable temporary config returned.
+	tmp, err := migrateLegacyConfig(home, "diff")
+	if err != nil || tmp == "" {
+		t.Fatalf("diff: %q %v", tmp, err)
+	}
+	defer os.Remove(tmp)
+	if _, err := os.Stat(filepath.Join(dir, "config.toml")); err == nil {
+		t.Fatal("diff wrote config.toml")
+	}
+	cfg, err := loadUserConfig(home, tmp)
+	if err != nil || cfg.Name != "Thomas Güttler" || len(cfg.Orgs) != 1 || cfg.Orgs[0].Name != "acme" {
+		t.Fatalf("diff config: %+v %v", cfg, err)
+	}
+
+	// apply: config.toml written, YAML moved to the backup.
+	if tmp, err := migrateLegacyConfig(home, "apply"); err != nil || tmp != "" {
+		t.Fatalf("apply: %q %v", tmp, err)
+	}
+	cfg, err = loadUserConfig(home, "")
+	if err != nil || cfg.PersonalEmail != "me@example.com" || cfg.Orgs[0].Email != "me@acme.com" {
+		t.Fatalf("migrated config: %+v %v", cfg, err)
+	}
+	if _, err := os.Stat(yamlPath); !os.IsNotExist(err) {
+		t.Error("config.yaml still there")
+	}
+	if got := readFile(t, backupPath(cacheDirFor(home), yamlPath)); got != orig {
+		t.Errorf("backup: %q", got)
+	}
+}
+
+func TestMigrateLegacyConfigUnknownKey(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "dotfiles")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("name: n\npersonal_email: e@x.com\nsurprise: 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if tmp, err := migrateLegacyConfig(home, "apply"); err != nil || tmp != "" {
+		t.Fatalf("%q %v", tmp, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "config.toml")); err == nil {
+		t.Error("converted a config with an unknown key")
+	}
+	if _, err := loadUserConfig(home, ""); err == nil || !strings.Contains(err.Error(), "config.toml") {
+		t.Errorf("want the old migration hint, got %v", err)
+	}
+}

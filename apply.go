@@ -104,6 +104,19 @@ func runApplyOrDiff(command string, args []string) int {
 		return 1
 	}
 
+	// An old config.yaml: convert it (diff uses a temporary converted copy).
+	if *configPath == "" {
+		tmp, err := migrateLegacyConfig(homeDir, command)
+		if err != nil {
+			fmt.Printf("❌ Converting the old config: %v\n", err)
+			return 1
+		}
+		if tmp != "" {
+			defer os.Remove(tmp)
+			*configPath = tmp
+		}
+	}
+
 	// First run without a config: ask for it instead of failing.
 	defaultPath, _ := configPaths(homeDir)
 	if command == "apply" && *configPath == "" && isTerminal(os.Stdin) {
