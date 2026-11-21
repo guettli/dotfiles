@@ -739,8 +739,8 @@ func defaultShell() string {
 	return "bash"
 }
 
-// loginShell returns the user's login shell from the passwd database, falling
-// back to $SHELL.
+// loginShell returns the user's login shell from the passwd database (macOS:
+// Directory Services), falling back to $SHELL.
 func loginShell() string {
 	u := os.Getenv("USER")
 	if cur, err := user.Current(); err == nil {
@@ -751,6 +751,14 @@ func loginShell() string {
 			fields := strings.Split(strings.TrimSpace(string(out)), ":")
 			if len(fields) >= 7 && fields[6] != "" {
 				return fields[6]
+			}
+		}
+	}
+	if runtime.GOOS == "darwin" && u != "" {
+		// macOS has no getent; Directory Services knows the login shell.
+		if out, err := exec.Command("dscl", ".", "-read", "/Users/"+u, "UserShell").Output(); err == nil {
+			if f := strings.Fields(string(out)); len(f) == 2 && f[0] == "UserShell:" {
+				return f[1]
 			}
 		}
 	}

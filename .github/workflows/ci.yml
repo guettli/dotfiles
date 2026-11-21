@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,6 +52,33 @@ jobs:
           cache: false
       - run: go build -buildvcs=false -o /tmp/dotfiles .
       - run: DOTFILES_BINARY=/tmp/dotfiles sh test/e2e.sh
+
+  e2e-macos:
+    # Coworkers with a Mac: a fresh home on a real macOS (bash 3.2, BSD tools,
+    # no getent). zsh chosen explicitly; "detect" lets init pick the shell from
+    # the login shell via dscl (the runner's is bash).
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [zsh, detect]
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      MISE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go build -buildvcs=false -o "$RUNNER_TEMP/dotfiles" .
+      - name: e2e in a fresh home
+        run: |
+          # Only the system's PATH: the runner image ships many tools
+          # (incl. Homebrew ones) a new Mac does not have.
+          export HOME="$RUNNER_TEMP/home" PATH=/usr/bin:/bin:/usr/sbin:/sbin
+          mkdir -p "$HOME"
+          DOTFILES_BINARY="$RUNNER_TEMP/dotfiles" E2E_SHELL="${{ matrix.shell != 'detect' && matrix.shell || '' }}" sh test/e2e.sh
 
   goreleaser:
     # The release config must stay valid.
