@@ -719,3 +719,51 @@ func TestRemoveLegacyMiseLinesMultilineString(t *testing.T) {
 		t.Error("guard accepted a change inside a string")
 	}
 }
+
+// fakeMise puts a mise on PATH which knows only the given registry names.
+func fakeMise(t *testing.T, version string, known ...string) string {
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in\n--version) echo '" + version + " linux-x64 (2026-01-01)' ;;\nregistry) cat <<'EOF'\n"
+	for _, k := range known {
+		script += k + "    aqua:x/" + k + "\n"
+	}
+	script += "EOF\n;;\n*) exit 1 ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(dir, "mise"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return dir
+}
+
+func TestMiseTooOld(t *testing.T) {
+	tools := []miseTool{{"bat", "1"}, {"micro", "2"}, {"aqua:foo/bar", "3"}}
+
+	fakeMise(t, "2026.11.6", "bat", "micro")
+	if p, _ := miseTooOld(tools); p != "" {
+		t.Errorf("current mise reported as too old: %s", p)
+	}
+
+	dir := fakeMise(t, "2026.5.12", "bat")
+	p, fix := miseTooOld(tools)
+	if !strings.Contains(p, "mise 2026.5.12") || !strings.Contains(p, "does not know micro") || strings.Contains(p, "aqua:") {
+		t.Errorf("problem: %q", p)
+	}
+	if !strings.Contains(p, filepath.Join(dir, "mise")) || !strings.Contains(p, "Several mise") {
+		t.Errorf("should name both mise on PATH: %q", p)
+	}
+	if !strings.HasSuffix(fix, "dotfiles apply") {
+		t.Errorf("fix: %q", fix)
+	}
+}
+
+func TestMiseUpdateHint(t *testing.T) {
+	for path, want := range map[string]string{
+		"/nix/store/abc-mise-2026.5.12/bin/mise": "nix profile upgrade mise",
+		"/opt/homebrew/Cellar/mise/1/bin/mise":   "brew upgrade mise",
+		"/home/me/.local/bin/mise":               "mise self-update",
+	} {
+		if got := miseUpdateHint(path); !strings.HasPrefix(got, want) {
+			t.Errorf("%s: %q", path, got)
+		}
+	}
+}
