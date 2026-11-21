@@ -760,6 +760,9 @@ func TestMiseUpdateHint(t *testing.T) {
 	for _, tc := range []struct{ path, real, want string }{
 		{"/home/me/.nix-profile/bin/mise", "/nix/store/abc-mise/bin/mise", "nix profile upgrade mise"},
 		{"/run/current-system/sw/bin/mise", "/nix/store/abc-mise/bin/mise", "update mise in your NixOS"},
+		{"/etc/profiles/per-user/me/bin/mise", "/nix/store/abc-mise/bin/mise", "update mise in your NixOS"},
+		{"/home/me/.local/state/nix/profile/bin/mise", "/nix/store/abc-mise/bin/mise", "nix profile upgrade mise"},
+		{"/usr/local/bin/mise", "/usr/local/bin/mise", "mise self-update"},
 		{"/snap/bin/mise", "/usr/bin/snap", "sudo snap refresh mise"},
 		{"/opt/homebrew/bin/mise", "/opt/homebrew/Cellar/mise/1/bin/mise", "brew upgrade mise"},
 		{"/home/me/.local/bin/mise", "/home/me/.local/bin/mise", "mise self-update"},

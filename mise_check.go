@@ -95,10 +95,11 @@ func miseUpdateHint(path, real string) string {
 	_, aptErr := exec.LookPath("apt-get")
 	_, dnfErr := exec.LookPath("dnf")
 	switch {
-	case strings.HasPrefix(real, "/nix/store/") && strings.Contains(path, "/.nix-profile/"):
-		return "nix profile upgrade mise   (or remove it: nix profile remove mise)"
-	case strings.HasPrefix(real, "/nix/store/"):
+	case strings.HasPrefix(real, "/nix/store/") &&
+		(strings.HasPrefix(path, "/run/current-system/") || strings.HasPrefix(path, "/etc/profiles/")):
 		return "update mise in your NixOS / home-manager configuration"
+	case strings.HasPrefix(real, "/nix/store/"):
+		return "nix profile upgrade mise   (or remove it: nix profile remove mise)"
 	case strings.HasPrefix(path, "/snap/"):
 		return "sudo snap refresh mise"
 	case strings.Contains(real, "/Cellar/") || strings.HasPrefix(real, "/opt/homebrew/") || strings.HasPrefix(real, "/home/linuxbrew/"):
@@ -107,7 +108,7 @@ func miseUpdateHint(path, real string) string {
 		return "sudo apt update && sudo apt install --only-upgrade mise"
 	case strings.HasPrefix(real, "/usr/bin/") && dnfErr == nil:
 		return "sudo dnf upgrade mise"
-	case strings.HasPrefix(real, "/usr/"):
+	case strings.HasPrefix(real, "/usr/") && !strings.HasPrefix(real, "/usr/local/"):
 		return "update the mise package with your system's package manager"
 	default:
 		return "mise self-update"
@@ -126,7 +127,7 @@ func miseTooOld(tools []miseTool) (problem, fix string) {
 	if len(mises) > 0 {
 		used = mises[0]
 	}
-	problem = fmt.Sprintf("mise %s (%s) is too old: it does not know %s", miseVersion(), used.real, strings.Join(unknown, ", "))
+	problem = fmt.Sprintf("mise %s (%s) is too old: it does not know %s", miseVersion(), used.path, strings.Join(unknown, ", "))
 	fix = miseUpdateHint(used.path, used.real)
 	if len(mises) > 1 {
 		var all []string
