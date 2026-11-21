@@ -727,7 +727,7 @@ func fakeMise(t *testing.T, version string, known ...string) string {
 	for _, k := range known {
 		script += k + "    aqua:x/" + k + "\n"
 	}
-	script += "EOF\n;;\n*) exit 1 ;;\nesac\n"
+	script += "EOF\n;;\ntool) [ \"$2\" = aliased ] ;;\n*) exit 1 ;;\nesac\n"
 	if err := os.WriteFile(filepath.Join(dir, "mise"), []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -736,7 +736,7 @@ func fakeMise(t *testing.T, version string, known ...string) string {
 }
 
 func TestMiseTooOld(t *testing.T) {
-	tools := []miseTool{{"bat", "1"}, {"micro", "2"}, {"aqua:foo/bar", "3"}}
+	tools := []miseTool{{"bat", "1"}, {"micro", "2"}, {"aqua:foo/bar", "3"}, {"aliased", "4"}}
 
 	fakeMise(t, "2026.11.6", "bat", "micro")
 	if p, _ := miseTooOld(tools); p != "" {
@@ -757,13 +757,15 @@ func TestMiseTooOld(t *testing.T) {
 }
 
 func TestMiseUpdateHint(t *testing.T) {
-	for path, want := range map[string]string{
-		"/nix/store/abc-mise-2026.5.12/bin/mise": "nix profile upgrade mise",
-		"/opt/homebrew/Cellar/mise/1/bin/mise":   "brew upgrade mise",
-		"/home/me/.local/bin/mise":               "mise self-update",
+	for _, tc := range []struct{ path, real, want string }{
+		{"/home/me/.nix-profile/bin/mise", "/nix/store/abc-mise/bin/mise", "nix profile upgrade mise"},
+		{"/run/current-system/sw/bin/mise", "/nix/store/abc-mise/bin/mise", "update mise in your NixOS"},
+		{"/snap/bin/mise", "/usr/bin/snap", "sudo snap refresh mise"},
+		{"/opt/homebrew/bin/mise", "/opt/homebrew/Cellar/mise/1/bin/mise", "brew upgrade mise"},
+		{"/home/me/.local/bin/mise", "/home/me/.local/bin/mise", "mise self-update"},
 	} {
-		if got := miseUpdateHint(path); !strings.HasPrefix(got, want) {
-			t.Errorf("%s: %q", path, got)
+		if got := miseUpdateHint(tc.path, tc.real); !strings.HasPrefix(got, tc.want) {
+			t.Errorf("%s: %q", tc.path, got)
 		}
 	}
 }
